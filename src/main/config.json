@@ -1,0 +1,19 @@
+{
+  "yolo": {
+    "weights": "src\\model\\YOLO_V6_pose\\mouse_pose_yolo8l_v6\\weights\\best.pt",
+    "conf": 0.35,
+    "input_size": 640
+  },
+  "pose": {
+    "kp_history_len": 3
+  },
+  "behavior": {
+    "weights": "src\\model\\best_models\\best_epoch100_BehaviorBiLSTM_1.pth",
+    "window_size": 16,
+    "rest_prob_margin": 0.2,
+    "min_any_duration": 96
+  },
+  "paths": {
+    "minmax_npz": "src\\model\\minmax_values.npz"
+  }
+}
