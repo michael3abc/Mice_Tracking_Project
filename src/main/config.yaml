@@ -1,0 +1,31 @@
+# config.yaml
+
+yolo:
+  # YOLOv8-Pose 權重檔路徑
+  weights: "src\\model\\YOLO_V6_pose\\mouse_pose_yolo8l_v6\\weights\\best.pt"
+  # 信心門檻
+  conf: 0.3
+  # 輸入尺寸 (正方形邊長)
+  input_size: 640
+  # 原始影片長寬
+  orig_size: [320, 240]
+
+pose:
+  # keypoint 歷史長度 (滑動平均)
+  kp_history_len: 3
+
+behavior:
+  # 行為模型權重檔
+  weights: "src\\model\\best_models\\best_epoch100_BehaviorBiLSTM_1.pth"
+  # window size (累積__幀數處理)
+  window_size: 32
+  # rest 類別低信心時的 margin
+  rest_prob_margin: 0.2
+  # 其他類別最短持續幀數
+  min_any_duration: 64
+  # 要用哪個行為模型類別
+  model: "BehaviorBiLSTM"
+
+paths:
+  # 存 keypoints min/max 參數的 npz 檔
+  minmax_npz: "src\\model\\minmax_values.npz"

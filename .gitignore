@@ -12,7 +12,7 @@ __pycache__/
 
 # 不追蹤本地設定/資料夾
 config.json
-config.yaml
+# config.yaml
 
 # 不追蹤大數據/中間輸出
 data_prediction/dataset/kpt_gt_behavior/kpt_gt_behavior.csv
