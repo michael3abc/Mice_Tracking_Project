@@ -1,19 +1,17 @@
-
-
-
-#!/usr/bin/env python3
 # --------------------------------------------
-#  Keypoints CSV  ➜  BiLSTM 行為預測 CSV
-#  不給參數就用下方 DEFAULT_* 路徑
+#  Keypoints CSV ➜ BiLSTM 行為預測 CSV
+#  支援命令列與 config 檔兩種設定方式
 # --------------------------------------------
 import os, sys, argparse
 import numpy as np, pandas as pd, torch
 from collections import deque
+# 專案根目錄自動加入 sys.path
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 from model.Behaviors_Models import BehaviorBiLSTM
 
+# 載入 config 檔案
 import yaml
 cfg_path = r"src\main\config.yaml"
 with open(cfg_path, "r", encoding='utf-8') as f:
@@ -33,6 +31,9 @@ history = [deque(maxlen=kp_history_len) for _ in range(8)]  # 假設跟 GUI 用�
 
 
 def smooth(prob, rest_margin=0.2, min_seg=32):
+    """
+    後處理機率序列，針對 rest 類別進行微調、短片段做 smoothing
+    """
     raw, out = prob.argmax(1), prob.argmax(1).copy()
     t=0
     while t<len(raw):
@@ -56,6 +57,9 @@ def smooth(prob, rest_margin=0.2, min_seg=32):
     return out
 
 def build64(kp_px,kp_nm,win_scaled,Xmin,Xmax):
+    """
+    feature vector: 結合歸一化關鍵點、滑動視窗特徵、速度加速度
+    """
     Xmin=Xmin.reshape(-1); Xmax=Xmax.reshape(-1)
     flat_norm=kp_nm.flatten()
     flat_px=np.nan_to_num(kp_px.flatten(),nan=0.0)
@@ -68,11 +72,29 @@ def build64(kp_px,kp_nm,win_scaled,Xmin,Xmax):
     return np.concatenate([flat_norm,scaled,v,a]).astype(np.float32)
 
 def predict_csv(kpt_csv,model_pth,minmax_npz,out_csv,window=32,device="cuda"):
-
+    """
+    核心流程：
+    1. 讀取 keypoint csv
+    2. 特徵轉換 + 時序窗
+    3. 行為模型推論
+    4. 行為結果與原始資料對齊並存檔
+    """
 
     dev="cuda" if (device=="cuda" and torch.cuda.is_available()) else "cpu"
     df=pd.read_csv(kpt_csv)
-    kpts=df.drop(columns='frame').values.reshape(len(df),8,2).astype(np.float32)
+    # kpts=df.drop(columns='frame').values.reshape(len(df),8,2).astype(np.float32)
+    kpt_cols = [f'kpt{i}_{xy}' for i in range(8) for xy in 'xy']
+    kpts = df[kpt_cols].values.reshape(len(df), 8, 2 ).astype(np.float32)
+
+    #box_centers的，目前不用
+    '''
+    # 如果有 bbox 也要特徵
+    bboxes = df[['box_x', 'box_y', 'box_w', 'box_h']].values.astype(np.float32)
+    # 展平成一維
+    flat_kpts = kpts.reshape(len(df), -1)  # shape: (N, 16)
+    # 合併進 model 特徵 (如果需要)
+    features = np.concatenate([flat_kpts, bboxes], axis=1)  # shape: (N, 20)
+    '''
 
     net=BehaviorBiLSTM().to(dev)
     net.load_state_dict(torch.load(model_pth,map_location=dev)); net.eval()
@@ -85,9 +107,10 @@ def predict_csv(kpt_csv,model_pth,minmax_npz,out_csv,window=32,device="cuda"):
     win_f = deque(maxlen=window)
     probs = []
 
-
+    # 每一幀做滑動視窗 feature
     for frame_idx, kp_px in enumerate(kpts):
-        # 滑動補點
+
+        # Keypoint 補點平滑，避免瞬間抖動或遺失
         for idx, (x, y) in enumerate(kp_px):
             if x > 0 and y > 0:
                 history[idx].append((x, y))
@@ -98,6 +121,7 @@ def predict_csv(kpt_csv,model_pth,minmax_npz,out_csv,window=32,device="cuda"):
                 valid.append(avg)
             else:
                 valid.append([orig_w/2, orig_h/2])
+
         valid = np.array(valid)
         norm = valid.copy()
         norm[:, 0] /= orig_w
@@ -112,6 +136,7 @@ def predict_csv(kpt_csv,model_pth,minmax_npz,out_csv,window=32,device="cuda"):
         if len(win_f) < window:
             continue
 
+        # 丟進 BiLSTM，拿到行為機率分布
         X = np.stack(win_f).T
         with torch.no_grad():
             p = torch.softmax(net(torch.tensor(X[None], dtype=torch.float32, device=dev)), 1)[0].cpu().numpy()
@@ -119,64 +144,67 @@ def predict_csv(kpt_csv,model_pth,minmax_npz,out_csv,window=32,device="cuda"):
 
 
     if not probs:
-        print("❗ 序列不足，無法推論"); return
+        print("序列不足，無法推論"); return
     probs=np.vstack(probs)
     labels=smooth(probs)
-    frames=df['frame'].values[window-1:window-1+len(labels)]
 
-    out=pd.DataFrame({
-        "frame":frames,
-        "behavior":[BEHAVIORS[i] for i in labels],
-        **{f"prob_{b}":probs[:,i] for i,b in enumerate(BEHAVIORS)}
-    })
-    os.makedirs(os.path.dirname(out_csv),exist_ok=True)
-    out.to_csv(out_csv,index=False,float_format="%.4f")
-    print(f"✓ Saved to {out_csv} | Device: {dev}")
-
-def batch_predict(n_files):
-    for i in range(1, n_files+1):
-        csv = fr"data_prediction/prediction_results/1_keypoints/keypoints_{i}.csv"
-        out = fr"data_prediction\prediction_results\2_behavios\behavios_{i}.csv"
-        if not os.path.exists(csv):
-            print(f"[Warning] File not found, skip: {csv}")
-            continue
-        print(f"===== [{i}] {csv} =====")
-        predict_csv(
-            kpt_csv   = csv,
-            model_pth = DEFAULT_MODEL,
-            minmax_npz= DEFAULT_MINMAX,
-            out_csv   = out,
-            window    = window,
-            device    = "cuda"
-        )
-
-if __name__=="__main__":
-    batch_predict(6)
+    # 對齊原始 keypoint 長度，預測不到的（前 window-1 幀）直接補 None
+    num_empty = window - 1
+    total_len = len(df)
+    full_behavior = [None] * num_empty + [BEHAVIORS[i] for i in labels]
+    # 最後不夠的一樣補None
+    full_behavior += [None] * (total_len - len(full_behavior))
+    assert len(full_behavior) == len(df)
 
 
-# # ---------------- CLI + 預設雙模式 ----------------
+    # 確保 probs 已經是 (有效幀數, num_behaviors) 的 numpy array
+    top3_idx = np.argsort(probs, axis=1)[:, -3:][:, ::-1]  # 每一行降冪排列 top3 index
+    top3_prob = np.take_along_axis(probs, top3_idx, axis=1)  # shape: (幀數, 3)
+    top3_label = np.array(BEHAVIORS)[top3_idx]  # shape: (幀數, 3)
+
+    full_top_label = {}
+    full_top_prob = {}
+    for i in range(3):
+        full_top_label[i] = [None] * num_empty + top3_label[:, i].tolist()
+        full_top_prob[i]  = [None] * num_empty + top3_prob[:, i].tolist()
+        full_top_label[i] += [None] * (total_len - len(full_top_label[i]))
+        full_top_prob[i]  += [None] * (total_len - len(full_top_prob[i]))
+
+    # 寫進 DataFrame
+    df['behavior'] = full_behavior
+    for i in range(3):
+        df[f"top{i+1}"] = full_top_label[i]
+        df[f"prob{i+1}"] = full_top_prob[i]
+
+    # 輸出單一檔案模式（behavior直接併到原本 keypoint csv）
+    if out_csv is not None: #i.e. single 輸出模式
+        os.makedirs(os.path.dirname(out_csv), exist_ok=True)
+        # 建議直接 append 回原 df，這樣欄位順序一致
+        df['behavior'] = full_behavior
+        df.to_csv(out_csv, index=False)
+        print(f"✓ Saved to {out_csv} | Device: {dev}")
+
+    # 回傳完整行為序列，讓 pipeline 可以彈性組合
+    return df
+
+
+# def batch_predict(n_files):
+#     for i in range(1, n_files+1):
+#         csv = fr"data_prediction/prediction_results/1_keypoints/keypoints_{i}.csv"
+#         out = fr"data_prediction\prediction_results\2_behavios\behavios_{i}.csv"
+#         if not os.path.exists(csv):
+#             print(f"[Warning] File not found, skip: {csv}")
+#             continue
+#         print(f"===== [{i}] {csv} =====")
+#         predict_csv(
+#             kpt_csv   = csv,
+#             model_pth = DEFAULT_MODEL,
+#             minmax_npz= DEFAULT_MINMAX,
+#             out_csv   = out,
+#             window    = window,
+#             device    = "cuda"
+#         )
+
 # if __name__=="__main__":
-#     pa=argparse.ArgumentParser(
-#         description="Keypoints CSV ➜ Behavior CSV (BiLSTM)")
-#     pa.add_argument("--csv",   help="keypoints CSV 路徑")
-#     pa.add_argument("--model", help="BehaviorBiLSTM .pth")
-#     pa.add_argument("--minmax",help="minmax_values.npz")
-#     pa.add_argument("--out",   help="輸出 CSV")
-#     pa.add_argument("--window",type=int,default=32)
-#     pa.add_argument("--cpu",action="store_true",help="強制用 CPU")
-#     args=pa.parse_args()
+#     batch_predict(6)
 
-#     # 若未提供參數 → 用上面 DEFAULT_* 路徑
-#     csv   = args.csv   or DEFAULT_CSV
-#     model = args.model or DEFAULT_MODEL
-#     mm    = args.minmax or DEFAULT_MINMAX
-#     out   = args.out   or DEFAULT_OUT
-    
-#     predict_csv(
-#         kpt_csv   = csv,
-#         model_pth = model,
-#         minmax_npz= mm,
-#         out_csv   = out,
-#         window    = args.window,
-#         device    = "cpu" if args.cpu else "cuda"
-#     )

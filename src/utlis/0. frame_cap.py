@@ -1,6 +1,6 @@
 import cv2
 import os
-
+# 將影片擷取圖片 => 拿去手工label
 cap = cv2.VideoCapture(r"C:\Users\micha\Desktop\full_database\20080421153635.mpg")
 output_path = r"c:\Users\micha\Desktop\frame_datas\frames_6"
 os.makedirs(output_path, exist_ok=True)
