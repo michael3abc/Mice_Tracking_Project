@@ -27,6 +27,7 @@ class MainWindow(QWidget):
             yolo_weights=self.cfg["yolo"]["weights"],
             yolo_conf=self.cfg["yolo"]["conf"],
             pose_input_size=self.cfg["yolo"]["input_size"],  
+            orig_size = self.cfg["yolo"]["orig_size"],
             kp_history_len=self.cfg["pose"]["kp_history_len"],
             behavior_model=self.cfg["behavior"]["model"], 
             behavior_weights=self.cfg["behavior"]["weights"],

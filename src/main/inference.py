@@ -27,7 +27,8 @@ class InferenceEngine:
         self,
         yolo_weights: str,
         yolo_conf: float,
-        pose_input_size: int,
+        pose_input_size: int,  
+        orig_size : list,      
         kp_history_len: int,
         behavior_model : str,
         behavior_weights: str,
@@ -41,6 +42,7 @@ class InferenceEngine:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.yolo_conf = yolo_conf
         self.pose_input_size = pose_input_size  
+        self.orig_size = orig_size
         self.kp_history_len = kp_history_len
         self.window_size = window_size
         self.rest_prob_margin = rest_prob_margin
@@ -85,12 +87,15 @@ class InferenceEngine:
         self.X_max = npz["X_max"].reshape(-1)
 
     def _init_visuals(self):
+        #小鼠骨架(關鍵點)連線
         self.skeleton = [(0,1),(1,7),(1,3),(1,4),(7,5),(7,6),(2,7)]
+        #關鍵點顏色
         self.point_colors = [
             (255,0,0),(0,255,0),(0,0,255),(128,128,0),
             (255,128,0),(0,255,255),(255,0,255),(128,0,255)
         ]
         self.line_color = (180,180,180)
+        #行為種類
         self.behavior_names = ['eat','groom','hang','micromovement','rear','rest','walk']
 
     def process_frame(self, frame: np.ndarray, curr_frame: int):
@@ -105,14 +110,14 @@ class InferenceEngine:
         kps_xy   = results.keypoints.xy.cpu().numpy()
         kps_conf = results.keypoints.conf.cpu().numpy()
 
-        # (B) 準備 deepsort 偵測輸入
+        # (B) 準備 deepsort 偵測輸入 (於一隻鼠沒差，但未來可用在預測多隻鼠)
         dets = []
         for box,score in zip(results.boxes.xyxy.cpu().numpy(), results.boxes.conf.cpu().numpy()):
             x1,y1,x2,y2 = box
             dets.append(([x1,y1,x2-x1,y2-y1], float(score), 'mouse'))
         tracks = self.tracker.update_tracks(dets, frame=frame)
 
-        # (C) 處理每個 track
+        # (C) 處理每個 track 
         for i, track in enumerate(tracks):
             if not track.is_confirmed() or i >= len(kps_xy):
                 continue
@@ -166,13 +171,15 @@ class InferenceEngine:
                 valid[idx] = bbox_center
         return valid
 
-    def restore_and_normalize_keypoints(self, keypoints, orig_size, input_size=640):
+    def restore_and_normalize_keypoints(self, keypoints, input_size=640):
         """
+        orig_size: 影片原始長寬
+        input_size: YOLO 輸入邊長
         keypoints: List of (x_resized, y_resized)
         orig_size: (w, h) of original frame
         回傳 List of (x_orig, y_orig, x_norm, y_norm)
         """
-        orig_w, orig_h = orig_size
+        orig_w, orig_h = self.orig_size[0], self.orig_size[1]
         inp = input_size
         scale = min(inp / orig_w, inp / orig_h)
         pad_w = (inp - orig_w * scale) / 2
@@ -216,7 +223,7 @@ class InferenceEngine:
         # 1) restore & normalize
         pts = [valid[i] for i in range(8)]
         restored = self.restore_and_normalize_keypoints(
-            pts, orig_size=(frame.shape[1], frame.shape[0]), input_size=self.pose_input_size
+            pts, input_size=self.pose_input_size
         )
         flat_norm = np.array([coord for _, _, x_n, y_n in restored for coord in (x_n, y_n)],
                              dtype=np.float32)
