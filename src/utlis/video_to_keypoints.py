@@ -39,6 +39,8 @@ import os
 from collections import deque
 from ultralytics import YOLO
 from tqdm import tqdm
+import yaml
+from pathlib import Path
 
 def video_to_keypoints_batch(
     video_path,
@@ -61,7 +63,7 @@ def video_to_keypoints_batch(
 
     while True:
         ret, frame = cap.read()
-        if not ret or frame_id>100:
+        if not ret:
             break
         frame_id += 1
         frames.append(frame)
@@ -149,15 +151,29 @@ def video_to_keypoints_batch(
 
 # 使用範例
 if __name__ == "__main__":
-    # 依實際yaml載入參數
-    video_to_keypoints_batch(
-        video_path = r"your_video.mp4",
-        out_csv = r"output/kpts_mice1.csv",
-        yolo_weight = "your_yolo.pt",
-        pose_input_size = 640,
-        yolo_conf = 0.5,
-        orig_w = 320,
-        orig_h = 240,
-        batch_size = 16,         # 建議 8~32 視你的GPU
-        kp_history_len = 3
-    )
+    # 依實際yaml載入參數    
+    cfg_path = r"src\main\config.yaml"
+    with open(cfg_path,'r', encoding='utf-8') as f:
+        cfg = yaml.safe_load(f)
+
+    yolo_weight = cfg["yolo"]["weights"]
+    kp_history_len = cfg["pose"]["kp_history_len"]
+    yolo_conf = cfg["yolo"]["conf"]
+
+    video_folder = Path(r"C:\Users\micha\Desktop\dataset_video")
+    output_folder = Path(r"data_prediction\prediction_results\1_keypoints\pass2")
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+
+    for i in range(7,13):
+        video_path = video_folder / f"mice{i}.mpg"
+        output_csv = output_folder / f"keypoints_mice{i}.csv"
+
+        video_to_keypoints_batch(
+            video_path=str(video_path),
+            out_csv=str(output_csv),
+            yolo_weight=yolo_weight,
+            yolo_conf=yolo_conf,
+            batch_size=32,
+            kp_history_len=kp_history_len
+        )

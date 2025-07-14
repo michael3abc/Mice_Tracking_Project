@@ -11,12 +11,14 @@ from PyQt5.QtWidgets import (
     QPushButton, QFileDialog, QSlider, QLabel, QComboBox
 )
 from inference import InferenceEngine
+from collections import deque
 
 class MainWindow(QWidget):
     def __init__(self, cfg: str):
         super().__init__()
         # self._load_config(cfg_path)
         self.cfg = cfg    
+        self.display_scale = self.cfg.get("display_scale", 2.0)
         self._init_ui()
         self._init_video()
         # 啟用拖放
@@ -28,18 +30,20 @@ class MainWindow(QWidget):
             yolo_conf=self.cfg["yolo"]["conf"],
             pose_input_size=self.cfg["yolo"]["input_size"],  
             orig_size = self.cfg["yolo"]["orig_size"],
+
             kp_history_len=self.cfg["pose"]["kp_history_len"],
+            vel_delta = self.cfg["pose"]["vel_delta"],
+            pose_class_path= self.cfg["pose"]["pose_class_path"],
+
             behavior_model=self.cfg["behavior"]["model"], 
             behavior_weights=self.cfg["behavior"]["weights"],
             window_size=self.cfg["behavior"]["window_size"],
+
             rest_prob_margin=self.cfg["behavior"]["rest_prob_margin"],
             min_any_duration=self.cfg["behavior"]["min_any_duration"],
             minmax_npz=self.cfg["paths"]["minmax_npz"],
         )
-
-    # def _load_config(self, path):
-    #     with open(path, "r", encoding="utf-8") as f:
-    #         self.cfg = json.load(f)
+        self.frame_buf = deque(maxlen=self.engine.window_size)
 
     def _init_ui(self):
         self.setWindowTitle("Mouse Pose Tracking & Behavior")
@@ -117,6 +121,7 @@ class MainWindow(QWidget):
         if self.cap:
             self.cap.release()
             self.timer.stop()
+            self.engine.reset()
         self.cap = cv2.VideoCapture(path)
         if not self.cap.isOpened():
             print("影片開啟失敗")
@@ -131,6 +136,7 @@ class MainWindow(QWidget):
         self.slider.setEnabled(True)
         self.play_btn.setEnabled(True)
         self.play_btn.setText("Play")
+
         
 
 
@@ -171,23 +177,22 @@ class MainWindow(QWidget):
     def next_frame(self):
         ret, frame = self.cap.read()
         if not ret:
+            while self.frame_buf:
+                self._show_frame(self.frame_buf.popleft())
             self.timer.stop()
             return
 
         curr = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
-            # **先放大影像，讓關鍵點更清晰**
-        frame = cv2.resize(
-            frame,
-            None,
-            fx=2,
-            fy=2,
-            interpolation=cv2.INTER_LINEAR
-        )
-
 
         # 呼叫 inference，回傳帶標註的 frame
-        annotated = self.engine.process_frame(frame, curr)
+        annotated = self.engine.process_frame(frame=frame,curr_frame= curr)
 
+        self.frame_buf.append((annotated, curr))
+        # if len(self.frame_buf) == self.engine.window_size:
+        oldest_frame, oldest_idx = self.frame_buf.popleft()
+        self._show_frame(oldest_frame, oldest_idx)
+
+    def _show_frame(self, annotated, curr):
         # 更新時間與 slider
         total = self.total_frames
         fps = self.cap.get(cv2.CAP_PROP_FPS) or 30

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.utils import resample
+import torch
 
 def Check_Class(df):
     print("剩下的行為種類：", df['behavior'].unique())
@@ -10,14 +11,14 @@ def Check_Class(df):
 剩下的行為種類： ['micromovement' 'walk' 'rear' 'eat' 'groom' 'drink' 'hang' 'rest']
 每種行為的樣本數：
  behavior
-micromovement    116967
-groom            115687
-walk              61074
-rear              57113
-eat               43393
-hang              36178
-rest              19042
-drink              1203
+groom            262666
+micromovement    251138
+rear             110212
+walk              91976
+hang              81625
+eat               80480
+rest              57224
+drink              2776
 
 由於drink太少 => 省略
 '''
@@ -31,6 +32,9 @@ per-video sliding → 得到很多 window: (X, y)
 再丟進 Balance_data() → 根據 y 來平衡 sample 數
 
 '''
+# import numpy as np
+# print(np.load("classes.npy"))
+
 
 def Balance_data(df):
     from sklearn.utils import resample #用來取樣
@@ -263,19 +267,80 @@ def smooth_short_events(preds, min_duration):
     return smoothed
 
 
+def compute_cos_np(kpts):
+    """
+    kpts: np.ndarray of shape [seq_len, 8, 2]
+    回傳: np.ndarray of shape [seq_len, 1]
+    """
+    # 拆出 nose, body, tail_base
+    nose = kpts[:, 0, :]    # [seq_len,2]
+    body = kpts[:, 1, :]    # [seq_len,2]
+    tail = kpts[:, 2, :]    # [seq_len,2]
+
+    v1 = nose - body        # [seq_len,2]
+    v2 = tail - body        # [seq_len,2]
+    dot  = np.sum(v1 * v2, axis=1, keepdims=True)                  # [seq_len,1]
+    norm = np.linalg.norm(v1, axis=1, keepdims=True) * np.linalg.norm(v2, axis=1, keepdims=True)  # [seq_len,1]
+    return dot / (norm + 1e-6)  # [seq_len,1]
+
+def compute_space_distances(X_rel):
+    """
+    X_rel: np.ndarray, shape = (N, seq_len, 16)   # 8 个 keypoint 的 x,y
+    回传: np.ndarray, shape = (N, seq_len, 3)     # nose↔tail, front↔front, rear↔rear
+    """
+    N, T, _ = X_rel.shape
+    kpt = X_rel.reshape(N, T, 8, 2)
+    nose = kpt[:,:,0,:]
+    tail = kpt[:,:,2,:]
+    f_right   = kpt[:,:,3,:]
+    f_left   = kpt[:,:,4,:]
+    r_right   = kpt[:,:,5,:]
+    r_left   = kpt[:,:,6,:]
+
+    d_nt = np.linalg.norm(nose - tail, axis=-1, keepdims=True)   # (N,T,1)
+    d_front_rear = np.linalg.norm((f_right + f_left)  -   (r_right + r_left),   axis=-1, keepdims=True)
+    return np.concatenate([d_nt, d_front_rear], axis=2)             # (N,T,2)
+
+def compute_direction_unit(vel):
+    """
+    vel: np.ndarray, shape = (N, seq_len, 16)  
+         # 每个 window 有 seq_len 帧，每帧 16 维 velocity (8 个 keypoint × 2 维)
+    返回:
+    np.ndarray, shape = (N, seq_len, 2)  
+      # 对每个 window、每帧，只保留 nose 关键点的速度方向单位向量 (dx, dy)
+    """
+    N, T, _ = vel.shape
+    # 把最后一维 16 拆成 (8,2)：8 个 keypoint，每个都有 (dx,dy)
+    vk = vel.reshape(N, T, 8, 2)
+    # 取出 nose（index=0）的速度向量，shape → (N, T, 2)
+    nose_v = vk[:,:,0,:]                        # (N,T,2)
+    speed  = np.linalg.norm(nose_v, axis=-1, keepdims=True) + 1e-6
+    return nose_v / speed                      # (N,T,2)
+
+def compute_speed_std(vel):
+    """
+    vel: np.ndarray, shape = (N, seq_len, 16)
+    回传: np.ndarray, shape = (N, seq_len, 1)
+      每个 window 所有关键点速度 magnitude 的全局 Std，再 tile 到 T 帧
+    """
+    N, T, _ = vel.shape
+    vk = vel.reshape(N, T, 8, 2)
+    mags = np.linalg.norm(vk, axis=-1)         # (N,T)
+    stds = np.std(mags.reshape(N, -1), axis=1, keepdims=True)  # (N,1)
+    return np.repeat(stds[:, None, :], T, axis=1)               # (N,T,1)
 
 
-if __name__ == '__main__':
-    # 只有在你直接執行 data_processing.py 才會跑這裡
-    df = pd.read_csv(r"C:\Users\micha\Desktop\python_workspace\YOLO Mice Project\src\Pose_to_behavior\dataset\keypoints_with_behavior.csv")
-    df = df[(df.behavior!='unknown')&(df.behavior!='drink')]
-    df = df.sort_values(['video_id','frame']).reset_index(drop=True)
-    Check_Class(df)
-    X, y = Sliding_windows(df)
-    print("Sliding:", X.shape, y.shape)
-    Xb, yb = Balance_windows(X, y)
-    print("Balanced:", Xb.shape, pd.Series(yb).value_counts())
-    ye, le = Encode_labels(yb)
-    print("Encode sample:", yb[:5], ye[:5], dict(zip(le.classes_, le.transform(le.classes_))))
+# if __name__ == '__main__':
+#     # 只有在你直接執行 data_processing.py 才會跑這裡
+#     df = pd.read_csv(r"data_prediction\dataset\kpt_gt_behavior\kpts_with_gt_behavior_yolo11L.csv")
+#     # df = df[(df.behavior!='unknown')&(df.behavior!='drink')]
+#     df = df.sort_values(['video_id','frame']).reset_index(drop=True)
+#     Check_Class(df)
+#     X, y = Sliding_windows(df)
+#     print("Sliding:", X.shape, y.shape)
+#     Xb, yb = Balance_windows(X, y)
+#     print("Balanced:", Xb.shape, pd.Series(yb).value_counts())
+#     ye, le = Encode_labels(yb)
+#     print("Encode sample:", yb[:5], ye[:5], dict(zip(le.classes_, le.transform(le.classes_))))
 
-    print(Xb, yb)
+#     print(Xb, yb)

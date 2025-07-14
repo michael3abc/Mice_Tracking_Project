@@ -32,6 +32,7 @@ src/model/YOLO_V6_pose/mouse_pose_yolo8l_v6/results.csv
 *.mkv
 *.jpg
 *.png
+*.csv
 
 # 不追蹤你的輸出目錄
 outputs/

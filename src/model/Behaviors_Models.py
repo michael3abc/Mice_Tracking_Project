@@ -1,5 +1,5 @@
 
-from .utils import  Sliding_windows, Balance_windows, Encode_labels, impute_windows, compute_velocity_acc, smooth_short_events, impute_windows_with_center
+# from .utils import  Sliding_windows, Balance_windows, Encode_labels, impute_windows, compute_velocity_acc, smooth_short_events, impute_windows_with_center
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -93,7 +93,7 @@ class BehaviorBiLSTM_v2(nn.Module):
 
 class BehaviorBiLSTM_v3(nn.Module):
     #Bi-LSTM → (B,T,2H) ──► SE (通道重標定) ──► 池化 (mean+max) ──► FC
-    def __init__(self, input_dim=64, hidden_dim=64, num_layers=3, num_classes=7, se_ratio=16, dropout_p=0.2):
+    def __init__(self, input_dim=70, hidden_dim=64, num_layers=3, num_classes=7, se_ratio=16, dropout_p=0.2):
         super().__init__()
         self.lstm = nn.LSTM(input_size=input_dim,
                             hidden_size=hidden_dim,
@@ -135,24 +135,66 @@ class BehaviorBiLSTM_v3(nn.Module):
         logits = self.fc(h)
         return logits
 
-class BehaviorTransformer(nn.Module):
-    def __init__(self, in_dim=64, d_model=128, nhead=4,
-                 num_layers=2, num_classes=7, seq_len=64):
+class PositionlEncoding(nn.Module): #transformer的時序資訊
+    def __init__(self, d_model,  max_length = 500):
         super().__init__()
-        self.input_proj = nn.Linear(in_dim, d_model)
-        self.pos_embed  = nn.Parameter(torch.randn(seq_len, d_model))   # learned PE
-        encoder_layer   = nn.TransformerEncoderLayer(d_model, nhead,
-                                                     dim_feedforward=256,
-                                                     dropout=0.1,
-                                                     batch_first=True)
-        self.encoder    = nn.TransformerEncoder(encoder_layer, num_layers)
-        self.cls_head   = nn.Linear(d_model, num_classes)
+        pe = torch.zeros(max_length, d_model) # [max_len, d_model]
+        pos = torch.arange(0, max_length, dtype = torch.float).unsqueeze(1) # [max_len, 1]
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2).float() * 
+            -(torch.log(torch.tensor(10000.0)) / d_model)
+        )
+        pe[:, 0::2] = torch.sin(pos * div_term)
+        pe[:, 1::2] = torch.cos(pos * div_term)
+        self.register_buffer('pe', pe.unsqueeze(0))  # [1,max_len,d_model]
 
-    def forward(self, x):  # x: (B, C=64, T=64)
-        x = x.permute(0, 2, 1)                     # (B,T,C)
-        x = self.input_proj(x) + self.pos_embed    # (B,T,d_model)
-        z = self.encoder(x)                        # (B,T,d_model)
-        z = z.mean(dim=1)                          # global mean pool
-        return self.cls_head(z)
+    def forward(self, x):
+        # x: [batch, seq_len, d_model]
+        seq_len = x.size(1)
+        return x + self.pe[:, :seq_len, :]
 
 
+class BehaviorTransformer(nn.Module):
+    def __init__(self, feature_dim=64, d_model=128, nhead=4,
+                 num_layers=3, num_classes=8, dropout = 0.1):
+        super().__init__()
+        # 1. 原始特徵投射到 d_model 維
+        self.input_proj = nn.Linear(feature_dim, d_model)
+        # 2. 位置編碼
+        self.pos_encoder = PositionlEncoding(d_model=d_model)
+        # 3. 多層 Transformer Encoder
+        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=d_model*4, dropout=dropout, batch_first=True)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer = encoder_layer, num_layers=num_layers)        
+        # 4. 全域池化 + classifier
+        self.pool = nn.AdaptiveAvgPool1d(1)
+
+        #   把 Transformer 編碼好的向量（長度 d_model）映射成 8 類的行為分類分數（logits）。
+        self.classifier = nn.Sequential(
+            nn.Linear(d_model, d_model//2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model//2, num_classes)
+        )
+
+    def forward(self, x):
+        # x: [batch, seq_len, feature_dim]
+        x = self.input_proj(x)                          # → [batch, seq_len, d_model]
+        x = self.pos_encoder(x)                         # 加位置
+        x = self.transformer_encoder(x)                 # → [batch, seq_len, d_model]
+        x = x.transpose(1,2)                            # → [batch, d_model, seq_len]
+        x = self.pool(x).squeeze(-1)                    # → [batch, d_model] 對每個樣本，針對每個通道（也就是 d_model），把 整個序列維（seq_len）平均壓縮成 1 值
+        out = self.classifier(x)                        # → [batch, num_classes]
+        return out
+
+
+"""
+可以加入的特徵:
+1. Posture
+2. Behavior Pattern
+3. 空間距離特徵
+    鼻子與尾巴距離
+    前後腳距離
+4. 方向單位向量: 2 (dx, dy)
+5. 總速度 std	1	vel 全體變化度
+
+"""

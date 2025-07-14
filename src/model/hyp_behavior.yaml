@@ -1,0 +1,5 @@
+data_path: "data_prediction\\dataset\\kpt_gt_behavior\\kpts_with_gt_behavior_yolo11L.csv"
+window_size: 32
+stride: 8
+orig_size: [320, 240]
+vel_delta: 3 #速度、加速度隔幾幀看
