@@ -1,4 +1,5 @@
 📦 專案根目錄
+```
 ├── src
 │   ├── main
 │   │   ├── gui.py                   實時影片播放 GUI 播放器
@@ -31,9 +32,10 @@
 │       ├── keypoints/              YOLO Pose 預測出來的關鍵點序列
 │       ├── behaviors/              根據關鍵點預測的行為結果
 │       └── combine/                YOLO + 行為 → 組合成完整預測結果（for API or analysis）
-
+```
 
 GPT推薦管理方式:
+```
 📦 Mice_tracking_project/
 ├── src/
 │   ├── main/
@@ -94,4 +96,4 @@ GPT推薦管理方式:
 │       ├── keypoints/             🎯 YOLO pose 預測結果
 │       ├── behaviors/             🧠 預測的行為結果（來自 kpt）
 │       └── combine/               📦 YOLO + 行為 → 合併完整預測
-
+```
