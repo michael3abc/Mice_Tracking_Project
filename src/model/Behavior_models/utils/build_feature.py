@@ -122,8 +122,6 @@ def compute_std_movement(X):
     stds = np.std(diffs, axis=1)
     return np.repeat(stds[:, None, :], T, axis=1)
 
-
-
 def det_rest(vel: np.array, speed_th = 0.05):
     """
     microment / rest 判斷:
@@ -158,12 +156,12 @@ def compute_box_features(box_arr: np.ndarray, orig_size: tuple[int,int]):
     h  = box_arr[..., 3]
 
     # 1. 中心座標與面積
-    cx   = (x + w / 2.0) / orig_size[0]                   # (N, T)
-    cy   = (y + h / 2.0)   / orig_size[1]                # (N, T)
-    area = w * h         / (orig_size[0]*orig_size[1] + 1e-6)               # (N, T)   
+    cx   = (x + w / 2.0) / orig_size[0]                         # (N, T)
+    cy   = (y + h / 2.0) / orig_size[1]                         # (N, T)
+    area = w * h         / (orig_size[0]*orig_size[1] + 1e-6)   # (N, T)   
 
     # 2. 計算寬高比 wh_ratio: (N,T) → (N,T,1)
-    wh_ratio = np.expand_dims(w/(h + 1e-6), axis=2)         # (N, T, 1)
+    wh_ratio = np.expand_dims(w/(h + 1e-6), axis=2)             # (N, T, 1)
 
 
 

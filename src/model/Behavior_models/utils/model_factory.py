@@ -71,19 +71,18 @@ SHAPE_SWITCH = {
     "BehaviorSTGCN_BiLSTM":   lambda x: x.unsqueeze(0),
 
     # ───── SimpleSTTR: (B = 1,feature_dim,T,1) ─────
-    "SimpleSTTR_BiLSTM":   lambda x: x.permute(1, 0).unsqueeze(0).unsqueeze(-1),
+    "SimpleSTTR_BiLSTM":      lambda x: x.permute(1, 0).unsqueeze(0).unsqueeze(-1),
     "SimpleSTTR_BiLSTM_v2":   lambda x: x.permute(1, 0).unsqueeze(0).unsqueeze(-1),
 
     # ───── ST-TR / ST-GCN route → (1,2,T,8) ─────
     "STTRNet":                lambda x: x[:, :16].reshape(-1,8,2).permute(2,0,1).unsqueeze(0),
     "LSTM_Transformer":       lambda x: x[:, :16].reshape(-1,8,2).permute(2,0,1).unsqueeze(0),
 
-    # ───── 雙路 STTR_BiLSTM  ─────
-    "STTR_BiLSTM":            lambda x: (
-                                    x.unsqueeze(0),                                             # full : (1,T,70)
-                                    x[:, :16].reshape(-1,8,2).permute(2,0,1).unsqueeze(0)       # kpts : (1,2,T,8)
-                            ),
+    # ───── 3-stream: STTR_BiLSTM  ─────
+    "STTR_BiLSTM":            lambda x: x.unsqueeze(0),    # full : (1,T,70)
+        
 
     # ───── 其餘未知模型 ─────
     "default":                lambda x: x.unsqueeze(0),    # (T,70)→(1,T,70)
 }
+
