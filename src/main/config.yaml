@@ -29,12 +29,14 @@ behavior:
   predict_stride: 8
   rest_prob_margin: 0
   min_any_duration: 0
-  feature_dim: 54
+  feature_dim: 55
 
 
   # model: "BehaviorBiLSTM_v3"
   # model: "BehaviorSTGCN_BiLSTM"
-  model: "SimpleSTTR_BiLSTM_v2"
+  # model: "SimpleSTTR_BiLSTM_v2"
+  model: "STTR_BiLSTM"
+
 
   model_params:
   #   d_model:     64                 # Transformer 隱層維度
@@ -45,22 +47,36 @@ behavior:
   #   num_classes: 7                   # 必填：行為類別數
 
 
-    d_model:     128                 # Transformer 隱層維度
-    sttr_dropout_p: 0.15
-    num_heads:   8                   # Multi-Head Attention 頭數
-    lstm_hidden: 64                  # Bi-LSTM hidden size
-    lstm_layers: 3                   # Bi-LSTM 疊層數
-    se_ratio:   16
-    lstm_dropout_p: 0.15                 # Dropout
-    num_classes: 7     
+    # d_model:     128                 # Transformer 隱層維度
+    # sttr_dropout_p: 0.15
+    # num_heads:   8                   # Multi-Head Attention 頭數
+    # lstm_hidden: 64                  # Bi-LSTM hidden size
+    # lstm_layers: 3                   # Bi-LSTM 疊層數
+    # se_ratio:   16
+    # lstm_dropout_p: 0.15                 # Dropout
+    # num_classes: 7     
     
     # hidden_dim: 64             
     # num_layers: 3
     # dropout_p: 0.2
     # se_ratio: 16
 
+    num_classes: 7
+    stgcn_channels: [64, 64]
+    sttr_dims: [64, 64]    
+    num_heads: 4
+    tcn_kernel: 9
+    dropout: 0.3
+    num_layers: 2
+    # BiLSTM
+    lstm_input: 55
+    lstm_hidden : 128
+    lstm_layers : 3
+    se_ratio : 16
+    dropout_p : 0.15
+
 paths:
-  experiment_root:  "C:\\Users\\micha\\Desktop\\behaviors_model_metrics\\SimpleSTTR_BiLSTM_v2_best_epoch26_test_F1_0.7437"
+  experiment_root:  "C:\\Users\\micha\\Desktop\\behaviors_model_metrics\\STTR_BiLSTM_best_epoch28_test_F1_0.7622"
   model_file:        best_model.pth
   minmax_file:       minmax_stats.npz
   labelenc_file:     label_encoder.pkl
