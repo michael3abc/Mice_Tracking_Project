@@ -2,7 +2,7 @@
 task: pose
 mode: train
 imgsz: 640
-batch: 8         # 依顯存
+batch: 16         # 依顯存
 
 epochs: 150
 close_mosaic: 10
@@ -21,7 +21,7 @@ weight_decay: 0.0005
 warmup_epochs: 3.0
 
 # ---- Augmentations ----
-# fliplr: 0.5
+fliplr: 0.5
 flipud: 0.05
 degrees: 15.0
 shear: 2.0

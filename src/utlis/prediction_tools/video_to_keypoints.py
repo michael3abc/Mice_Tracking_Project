@@ -6,7 +6,7 @@ def video_to_keypoint(video_path, out_csv):
     import pandas as pd
     from tqdm import tqdm
     import os
-    model = YOLO(r"C:\Users\micha\Desktop\python_workspace\YOLO Mice Project\src\V6_pose\mouse_pose_yolo8l_v6\weights\best.pt")
+    model = YOLO(r"src\model\YOLO\YOLO_weights\mouse_pose_yolo11L_150\weights\best.pt")
 
     # 2. 定義 keypoint 欄位名稱（假設你要用 kpt0_x…kpt7_y）
     kpt_cols = []
@@ -161,11 +161,11 @@ if __name__ == "__main__":
     yolo_conf = cfg["yolo"]["conf"]
 
     video_folder = Path(r"C:\Users\micha\Desktop\dataset_video")
-    output_folder = Path(r"data_prediction\prediction_results\1_keypoints\pass2")
+    output_folder = Path(r"data_prediction\prediction_results\1_keypoints\yolov8")
     output_folder.mkdir(parents=True, exist_ok=True)
 
 
-    for i in range(7,13):
+    for i in range(8,13):
         video_path = video_folder / f"mice{i}.mpg"
         output_csv = output_folder / f"keypoints_mice{i}.csv"
 

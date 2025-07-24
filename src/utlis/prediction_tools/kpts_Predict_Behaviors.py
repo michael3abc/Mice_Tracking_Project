@@ -6,11 +6,11 @@ import os, sys, argparse
 import numpy as np, pandas as pd, torch
 from collections import deque
 # 專案根目錄自動加入 sys.path
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
-from model.Behaviors_Models import BehaviorBiLSTM, BehaviorBiLSTM_v3
-from model.utils import (
+from model.Behavior_models_old.Behaviors_Models import BehaviorBiLSTM, BehaviorBiLSTM_v3, BehaviorSTGCN_BiLSTM, SimpleSTTR
+from model.Behavior_models_old.utils import (
     compute_velocity_acc,
     compute_cos_np,
     compute_space_distances,
@@ -121,7 +121,6 @@ def build70_via_utils(
         flat_rel, flat_mm, velacc,
         [cos_val], space_val, dir_val, [std_val]
     ], axis=0).astype(np.float32)
-
 
 def win_rl_to_kptseq(win_rl: deque) -> np.ndarray:
     """
@@ -249,7 +248,7 @@ def win_rl_to_kptseq(win_rl: deque) -> np.ndarray:
 #     return df
 
 
-def predict_csv(kpt_csv, model_pth=DEFAULT_MODEL, minmax_npz=DEFAULT_MINMAX,
+def predict_csv(model, kpt_csv, model_pth=DEFAULT_MODEL, minmax_npz=DEFAULT_MINMAX,
                 out_csv=None, window=window, device="cuda"):
     dev = "cuda" if (device=="cuda" and torch.cuda.is_available()) else "cpu"
     df  = pd.read_csv(kpt_csv)
@@ -257,7 +256,7 @@ def predict_csv(kpt_csv, model_pth=DEFAULT_MODEL, minmax_npz=DEFAULT_MINMAX,
     kpts = df[kpt_cols].values.reshape(len(df), 8, 2).astype(np.float32)
 
     # 載模型
-    net = BehaviorBiLSTM_v3().to(dev)
+    net = model().to(dev)
     net.load_state_dict(torch.load(model_pth, map_location=dev))
     net.eval()
 
@@ -307,9 +306,12 @@ def predict_csv(kpt_csv, model_pth=DEFAULT_MODEL, minmax_npz=DEFAULT_MINMAX,
 
         # 4) 模型推論
         X_input = np.stack(win_f).T  # (70, window)
+        X_tensor = torch.tensor(X_input[None], dtype=torch.float32, device=dev)  # (1, 70, window)
+        X_tensor = X_tensor.unsqueeze(-1)  # (1, 70, window, 1)
+
         with torch.no_grad():
             p = torch.softmax(
-                net(torch.tensor(X_input[None], dtype=torch.float32, device=dev)),
+                net(X_tensor),
                 dim=1
             )[0].cpu().numpy()
         probs.append(p)
@@ -349,25 +351,45 @@ def predict_csv(kpt_csv, model_pth=DEFAULT_MODEL, minmax_npz=DEFAULT_MINMAX,
 
 
 if __name__=="__main__":
-    kpt_csv     = r"data_prediction\prediction_results\1_keypoints\pass2\keypoints_mice3.csv"
-    # 你訓練好的模型檔
-    model_pth   = r"src\\model\\best_models\\best_epoch100_BehaviorBiLSTM_v3_2.pth"
-    # min–max npz
-    minmax_npz  = r"minmax_values.npz"
-    # 想輸出的行為結果檔
+    for i in range(1,13):
+        kpt_csv     = fr"data_prediction\prediction_results\1_keypoints\pass2\keypoints_mice{i}.csv"
+        # 訓練好的模型檔
+        model_pth   = r"src\model\Behavior_models\best_models\SimpleSTTR_best_epoch11_F10.7928.pth"
+        # min–max npz
+        minmax_npz  = r"minmax_GCN_LSTM.npz"
+        # 想輸出的行為結果檔
 
-    out_csv    = r"data_prediction\prediction_results\2_behavios\pass2\behaviors_mice3.csv"
+        out_csv    = fr"data_prediction\prediction_results\2_behavios\ST-TR\behaviors_mice{i}.csv"
+        
+        # 確保輸出目錄存在
+        out_dir = os.path.dirname(out_csv)
+        os.makedirs(out_dir, exist_ok=True)
+
+        # predict_csv(
+        #     model = BehaviorBiLSTM_v3,
+        #     kpt_csv    = kpt_csv,
+        #     model_pth  = model_pth,
+        #     minmax_npz = minmax_npz,
+        #     out_csv    = out_csv,
+        #     window     = 96,       # 你的 window_size
+        #     device     = "cuda"    # or "cpu"
+        # )
+
+        predict_csv(
+            model = lambda: SimpleSTTR(
+                    in_channels= 70,   # 你輸入的70維 feature 是放在 channel 維度
+                    d_model=128,      # 自訂特徵維度（注意力維度），可以自己調
+                    num_heads=8,     # 多頭注意力數量
+                    num_classes=7    # 你總共有 7 類行為               
+            ),
+            kpt_csv    = kpt_csv,
+            model_pth  = model_pth,
+            minmax_npz = minmax_npz,
+            out_csv    = out_csv,
+            window     = 96,       # 你的 window_size
+            device     = "cuda"    # or "cpu"
+        )
+
+
+
     
-    # 確保輸出目錄存在
-    out_dir = os.path.dirname(out_csv)
-    os.makedirs(out_dir, exist_ok=True)
-
-    predict_csv(
-        kpt_csv    = kpt_csv,
-        model_pth  = model_pth,
-        minmax_npz = minmax_npz,
-        out_csv    = out_csv,
-        window     = 96,       # 你的 window_size
-        device     = "cuda"    # or "cpu"
-    )
-

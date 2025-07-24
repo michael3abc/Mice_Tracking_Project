@@ -18,6 +18,7 @@ config.json
 data_prediction/dataset/kpt_gt_behavior/kpt_gt_behavior.csv
 data_prediction/prediction_results/
 src/model/YOLO_V6_pose/mouse_pose_yolo8l_v6/results.csv
+*.cache
 
 # 不追蹤模型和權重檔
 *.pt
@@ -33,7 +34,10 @@ src/model/YOLO_V6_pose/mouse_pose_yolo8l_v6/results.csv
 *.jpg
 *.png
 *.csv
+*.jpg
+*.txt
 
 # 不追蹤你的輸出目錄
 outputs/
 output/
+just_for_safe/

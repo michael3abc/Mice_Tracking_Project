@@ -49,10 +49,10 @@ if __name__ == '__main__':
     # 1. 讀行為標籤
     gt_csv_folder = r"C:\Users\micha\Desktop\Mice_tracking_project\data_prediction\dataset\gt_behaviors"
     # 2. 讀keypoints
-    kpt_folder = r"data_prediction\prediction_results\1_keypoints\pass2"
+    kpt_folder = r"data_prediction\prediction_results\1_keypoints\yolov11"
 
     df_kpt_with_labeled = []
-    for i in range(1, 11):
+    for i in range(1, 13):
         df_gt_behavior = pd.read_csv(os.path.join(gt_csv_folder, f"gt_behavior_mice{i}.csv"))
         df_kpt_pred = pd.read_csv(os.path.join(kpt_folder, f"keypoints_mice{i}.csv"))
        
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     # 4. 輸出
     out_folder = r'data_prediction\dataset\kpt_gt_behavior'
     os.makedirs(out_folder, exist_ok=True)
-    out_csv = os.path.join(out_folder, 'kpts_with_gt_behavior_yolo11L.csv')
+    out_csv = os.path.join(out_folder, 'kpts_with_gt_behavior_yolov11.csv')
     df_all.to_csv(out_csv, index=False)
     print(f"\n 已完成：已輸出 {out_csv}，總樣本數 = {len(df_all)}")
 

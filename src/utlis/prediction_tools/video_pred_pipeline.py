@@ -1,7 +1,7 @@
 import sys
 sys.path.append(".")
 from video_to_keypoints import  video_to_keypoints_batch
-from Kpts_Predict_Behaviors import predict_csv
+from kpts_Predict_Behaviors import predict_csv
 import yaml
 yaml_path = r"src\main\config.yaml"
 import pandas as pd

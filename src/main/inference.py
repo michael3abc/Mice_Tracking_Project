@@ -1,141 +1,127 @@
 # inference.py
 import cv2
-import torch
 import numpy as np
-from ultralytics import YOLO
-from deep_sort_realtime.deepsort_tracker import DeepSort
-from typing import Optional
-
 import sys, os
-import cv2
-import torch
+import torch, pickle
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import numpy as np
 from collections import deque
-from typing import Optional
+
 
 src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..')) #前兩層
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-from model.Behaviors_Models import Behavior1D_CNN, BehaviorBiLSTM, BehaviorBiLSTM_v3, BehaviorTransformer
-from model.utils import compute_space_distances, compute_direction_unit, compute_speed_std, compute_velocity_acc, compute_cos_np
-from model import Behaviors_Models
+
+from model.Behavior_models.utils.build_feature import  build_features
+from model.Behavior_models.utils.model_factory import build_model, SHAPE_SWITCH
+
 os.chdir(r"C:\Users\micha\Desktop\Mice_tracking_project")
 
 
 class InferenceEngine:
-    def __init__(
-        self,
-        yolo_weights: str,
-        yolo_conf: float,
-        
-        pose_input_size: int,  
-        orig_size : list,    
-
-        kp_history_len: int,
-        vel_delta : int,
-        pose_class_path : str,
-
-        behavior_model : str,
-        behavior_weights: str,
-        window_size: int,
-        rest_prob_margin: float,
-        min_any_duration: int,
-
-        minmax_npz: str,
-        device: Optional[str] = None
-    ):
-        # 1. 儲存超參數
+    def __init__(self, cfg: dict, device: str | None = None):
+        self.cfg    = cfg
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.yolo_conf = yolo_conf
-        self.display_scale = 2.0
 
-        self.yolo_input_size = pose_input_size
+            # --- 把區塊存在屬性，供其他 init 用 ---
+        self.ycfg, self.pcfg, self.bcfg, self.paths = (
+            cfg["yolo"], cfg["pose"], cfg["behavior"], cfg["paths"]
+        )
 
-        self.pose_window_rel = deque(maxlen=window_size)   # 存 rel-norm 序列
-        self.pose_window_minMax = deque(maxlen=window_size)   # 存 min-max 序列
+        # 1. 影像檢測 + 追蹤
+        self._init_yolo_tracker()
 
-        self.model_input_window   = deque(maxlen=window_size)
-        self.behavior_probs_window = []
+        # 2. 行為模型
+        self._init_behavior_model()
 
-        self.frame_size = tuple(orig_size)     # (width, height)
+        # 3. 其他超參與 deque
+        self.vel_delta        = self.pcfg["vel_delta"]
+        self.pose_history_len = self.pcfg["kp_history_len"]
+        self.window_size      = self.bcfg["window_size"]
+        self.predict_stride   = self.bcfg["predict_stride"]
+        self.rest_prob_margin = self.bcfg["rest_prob_margin"]
+        self.min_any_duration = self.bcfg["min_any_duration"]
+        self.feature_dim      = self.bcfg["feature_dim"]
+        self.look_ahead  = 0 
 
-        self.kp_history_len = kp_history_len
-        self.vel_delta = vel_delta
-        self.pose_class = np.load(pose_class_path, allow_pickle=True).tolist()
 
-        self.window_size = window_size
-        self.rest_prob_margin = rest_prob_margin
-        self.min_any_duration = min_any_duration
+        self.pose_window_rel      = deque(maxlen=self.window_size)
+        self.pose_window_minMax   = deque(maxlen=self.window_size)
+        self.behavior_probs_window= deque(maxlen=self.window_size)
+        self.model_input_window   = deque(maxlen=self.window_size) 
+        self.kp_history = [deque(maxlen=self.pcfg["kp_history_len"]) for _ in range(8)]
+
+        self.raw20_queue          = deque(maxlen=self.window_size)
+
+        self.display_scale = float(self.ycfg.get("display_scale", 2.0))  
+        self._frame_counter = 0    
         
+                      
 
-        # 2. 載入模型
-        self.behavior_weights = behavior_weights
-        self.behavior_model_name = behavior_model
-        self._init_models(yolo_weights, behavior_weights, minmax_npz)
-
-        # 3. 狀態維護
-        self.kp_history = [deque(maxlen=kp_history_len) for _ in range(8)]
-        self.model_input_window = deque(maxlen=window_size)
-        self.behavior_probs_window = deque(maxlen=window_size)
-
-        # 4. 類別／顏色設定（畫 skeleton 時用）
+        # 4. 初始化骨架資訊、kpts 顏色等
         self._init_visuals()
 
-    def _init_models(self, yolo_w, beh_w, minmax_npz):
-        # YOLOv8-Pose
-        self.yolo = YOLO(yolo_w)
+    def _init_yolo_tracker(self):
+        self.yolo_conf      = self.ycfg["conf"]
+        self.yolo_input_size= self.ycfg["input_size"]
+        self.frame_size  = self.ycfg["orig_size"]
+        self.orig_w, self.orig_h = self.frame_size
+
+        self.yolo = YOLO(self.ycfg["weights"])
         self.yolo.fuse()
 
-        # DeepSort
+        # 目前沒用到 DeepSort
         self.tracker = DeepSort(max_age=10, max_iou_distance=0.7)
 
-        # 行為模型（BiLSTM v3）
-        try:
-            ModelClass = getattr(Behaviors_Models, self.behavior_model_name)
-        except AttributeError:
-            raise ValueError(f"Unknown behavior model: {self.behavior_model_name}")
-        
-        self.behavior_model = ModelClass().to(self.device)
-        if ModelClass.__name__ == "BehaviorTransformer":
-            num_classes = 7
-            self.behavior_model = ModelClass(
-                feature_dim=70,
-                d_model=64,
-                nhead=8,
-                num_layers=1,
-                num_classes=num_classes,
-                dropout=0.1
-            ).to(self.device)
-        elif ModelClass.__name__ == "BehaviorBiLSTM_v3":
-            # BiLSTM_v3 要指定 input_dim
-            # 这里 71 = 16(norm)+16(scale)+32(vel/acc)+1(cos)+3(space)+2(dir)+1(std)
-            self.behavior_model = ModelClass(
-                input_dim=70,
-                hidden_dim=64,
-                num_layers=3,
-                num_classes=7,
-                se_ratio=16,
-                dropout_p=0.2
-            ).to(self.device)
-        else:
-            self.behavior_model = ModelClass().to(self.device)
+    def _init_behavior_model(self):
+        exp_dir = self.paths["experiment_root"]      # ← 一個資料夾
+        model_pth = os.path.join(exp_dir, self.paths["model_file"])
+        minmax_pz = os.path.join(exp_dir, self.paths["minmax_file"])
+        le_pkl    = os.path.join(exp_dir, self.paths["labelenc_file"])
 
-        state = torch.load(beh_w, map_location="cpu")
-        self.behavior_model.load_state_dict(state)
-        self.behavior_model.eval()
+        # 1. 產生模型
+        model_params = self.bcfg.get("model_params") or {}
+        self.behavior_model = build_model(
+            model_name = self.bcfg["model"],
+            feat_dim    = self.bcfg["feature_dim"],
+            num_classes = 7,
+            model_params      = model_params
+        )
 
-        # MinMax normalization parameters
-        npz = np.load(minmax_npz)
-        self.X_min = npz["X_min"].reshape(-1)
-        self.X_max = npz["X_max"].reshape(-1)
+        print(f"[INFO] 讀取行為模型權重: {model_pth}")
+        ckpt = torch.load(model_pth, map_location="cpu")
+
+        # --- ▸▸ 把 ckpt 轉成「純 state_dict」並去掉 'model.' prefix ◂◂ ---
+        if isinstance(ckpt, dict) and "model" in ckpt:      # case 1: {"model": sd, ...}
+            ckpt = ckpt["model"]
+
+        # 若 key 依舊帶 "model." 前綴 → 全面移除
+        if any(k.startswith("model.") for k in ckpt.keys()):
+            ckpt = {k.replace("model.", ""): v for k, v in ckpt.items()}
+
+        # 2) 確保 in_channels = feat_dim 全對齊
+        missing, unexpected = self.behavior_model.load_state_dict(ckpt, strict=True)
+        assert not missing and not unexpected, f"還有對不上的層：{missing} / {unexpected}"
+
+        print("[INFO] 權重成功對齊 ✔")
+        self.behavior_model.eval().to(self.device)
+
+        # === 載入 Min‧Max & LabelEncoder ===
+        npz = np.load(minmax_pz)
+        self.X_min = np.asarray(npz["X_min"], dtype=np.float32)
+        self.X_max = np.asarray(npz["X_max"], dtype=np.float32)
+        self.stats = {"mins": self.X_min, "maxs": self.X_max}
+
+
+        with open(le_pkl, "rb") as f:
+            self.le = pickle.load(f)
+        self.behavior_names = self.le.classes_.tolist()
+        print(self.behavior_names)
 
     def _init_visuals(self):
-        #小鼠骨架(關鍵點)連線
-
-        '''
+        '''        
         keypoint_to_name = {
         0: 'nose',
         1: 'body',
@@ -149,6 +135,8 @@ class InferenceEngine:
 
         flip_idx: [0, 1, 2, 4, 3, 6, 5, 7]
         '''
+
+        # 1. 小鼠骨架(關鍵點)連線
         self.skeleton = [
                     (0,1),  # nose ↔ body
                     (3,1),  # front_right ↔ body
@@ -158,198 +146,125 @@ class InferenceEngine:
                     (2,7),  # tail_base ↔ hip
                     (7,1) ]  # hip ↔ body
 
-        # self.skeleton = [(0,1),(1,7),(1,3),(1,4),(7,5),(7,6),(2,7)]
-        #關鍵點顏色
+
+        # 2. 關鍵點顏色
         self.point_colors = [
             (255,0,0),(0,255,0),(0,0,255),(128,128,0),
             (255,128,0),(0,255,255),(255,0,255),(128,0,255)
         ]
         self.line_color = (180,180,180)
-        #行為種類
-        self.behavior_names = ['eat','groom','hang','micromovement','rear','rest','walk']
-        # self.behavior_names = self.pose_class
+
+        # 3. 行為種類
         self.rest_index = self.behavior_names.index("rest")
 
-
-    '''
     def process_frame(self, frame: np.ndarray, curr_frame: int):
-        """
-        1) 呼叫 YOLOv8-Pose，取出 keypoints + boxes  
-        2) DeepSort 更新追蹤  
-        3) 逐 track 呼叫 _process_track 加上關鍵點 & 行為  
-        回傳：帶標註的 frame
-        """
-        # (A) YOLO 推論
-        results = self.yolo(frame, conf=self.yolo_conf)[0]
-        kps_xy   = results.keypoints.xy.cpu().numpy()
-        kps_conf = results.keypoints.conf.cpu().numpy()
-
-        # (B) 準備 deepsort 偵測輸入 (於一隻鼠沒差，但未來可用在預測多隻鼠)
-        dets = []
-        for box,score in zip(results.boxes.xyxy.cpu().numpy(), results.boxes.conf.cpu().numpy()):
-            x1,y1,x2,y2 = box
-            dets.append(([x1,y1,x2-x1,y2-y1], float(score), 'mouse'))
-        tracks = self.tracker.update_tracks(dets, frame=frame)
-
-        
-
-        # (C) 處理每個 track 
-        for i, track in enumerate(tracks):
-            if not track.is_confirmed() or i >= len(kps_xy):
-                continue                
-                
-            frame = self._process_track(
-                frame, track, kps_xy[i], kps_conf[i], curr_frame
-            )
-        return frame
-
-
-    def _process_track(self, frame, track, kps_xy, kps_conf, curr_frame):
-        # draw bbox
-        x,y,w,h = map(int, track.to_ltwh())
-        cv2.rectangle(frame, (x,y), (x+w,y+h), self.line_color, 1)
-
-        # 平滑 keypoints + skeleton
-        valid = self._get_valid_kps(track, kps_xy, curr_frame)
-        for a,b in self.skeleton:
-            if a in valid and b in valid:
-                cv2.line(frame, valid[a], valid[b], self.line_color, 1, cv2.LINE_AA)
-        for idx,pt in valid.items():
-            cv2.circle(frame, pt, 3, self.point_colors[idx], -1, cv2.LINE_AA)
-
-        # 行為預測
-        X = self._build_feature_vector(frame, valid)
-        if X is not None:
-            self.model_input_window.append(X)
-            behavior, _ = self._predict_behavior()
-            if behavior:
-                cv2.putText(frame, behavior, (x,y-10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255),1,cv2.LINE_AA)
-        return frame
-
-
-    def _get_valid_kps(self, track, kps_xy, curr_frame):
-        """
-        根據 history 做平滑：
-        如果當前 keypoint 有值就存入 history，
-        否則用 history 的平均值，
-        如果 history 也沒值，則用 bbox center 當 fallback。
-        """
-        x, y, w, h = map(int, track.to_ltwh())
-        bbox_center = (x + w // 2, y + h // 2)
-        valid = {}
-        for idx, (kx, ky) in enumerate(kps_xy):
-            if kx > 0 and ky > 0:
-                pt = (int(kx), int(ky))
-                self.kp_history[idx].append(pt)
-            if self.kp_history[idx]:
-                avg = np.mean(self.kp_history[idx], axis=0)
-                valid[idx] = (int(avg[0]), int(avg[1]))
-            else:
-                valid[idx] = bbox_center
-        return valid
-    '''
-    def process_frame(self, frame: np.ndarray, curr_frame: int):
-        # (A) YOLO 推論
+        # 1. YOLO 推論
         results = self.yolo(frame, conf=self.yolo_conf)[0]
         if len(results.boxes) == 0:
             return frame
 
-        # 只取第一隻偵測到的老鼠
+        # 2. 只取第一隻偵測到的老鼠
         bbox = results.boxes.xyxy[0].cpu().numpy()   # shape (4,)
         kps_xy   = results.keypoints.xy[0].cpu().numpy()
+        
         kps_conf = results.keypoints.conf[0].cpu().numpy()
 
         annotated = self._process_single_mouse(frame,bbox, kps_xy,kps_conf, curr_frame)
 
         annotated_disp = cv2.resize(annotated, None, fx=self.display_scale, fy=self.display_scale, interpolation=cv2.INTER_LINEAR)
 
+        return annotated_disp    
+   
 
-        # # 把框跟關鍵點一起送去處理
-        # frame = self._process_single_mouse(frame, bbox, kps_xy, kps_conf, curr_frame)
-        return annotated_disp
-    
-    def _process_single_mouse(self,
-                            frame: np.ndarray,
-                            bbox: np.ndarray,
-                            kps_xy: np.ndarray,
-                            kps_conf: np.ndarray,
-                            curr_frame: int) -> np.ndarray:
-        """
-        frame      : 原始 (未放大) 影格，BGR
-        bbox       : ndarray [x1, y1, x2, y2]，YOLO 輸出之原尺寸座標
-        kps_xy     : ndarray (8, 2)，YOLO 關鍵點   ── 原尺寸
-        kps_conf   : ndarray (8,)   ，關鍵點置信度 ── (目前未用，可之後做 keypoint mask)
-        curr_frame : 目前影格索引 (for history)
-        回傳       : 已放大、且重畫骨架/框/行為文字的影格，BGR
-        """
-        # ─────────────────────────────────────────────────────────────
-        # 1. 以「原尺寸」計算 bbox 與關鍵點
-        # ─────────────────────────────────────────────────────────────
-        x1o, y1o, x2o, y2o = map(int, bbox)           # original bbox
-        w0, h0 = x2o - x1o, y2o - y1o
+    def _process_single_mouse(self, frame, bbox, kps_xy, kps_conf, curr_frame):
+        # 1. 平滑並取得 valid skeleton
+        valid = self._get_valid_kps(bbox, kps_xy)
 
-        # 更新 / 平滑 keypoints，存 history
-        valid = self._get_valid_kps((x1o, y1o, w0, h0), kps_xy, curr_frame)
+        # 2. 計算 raw20 feature_vector，並推入 deque 
+        if bbox is None:
+            X20 = np.zeros(20, dtype=np.float32)
+        else:
+            X20 = self.make_raw20(bbox, valid)
+        self.raw20_queue.append(X20)
+        self._frame_counter += 1
 
-        # ─────────────────────────────────────────────────────────────
-        # 2. 行為特徵 & 預測 (仍用原尺寸座標)
-        # ─────────────────────────────────────────────────────────────
-        feat = self._build_feature_vector(frame, valid)
-        if feat is not None:
-            self.model_input_window.append(feat)
-            behavior, _ = self._predict_behavior()
-        else:                                  # 尚未收滿窗口時也補 0，保持時序長度
-            self.model_input_window.append(np.zeros(70, dtype=np.float32))
-            behavior = ""
+        # 3. 當raw20 queue視窗滿，且每 stride 預測一次
+        if ((self._frame_counter % self.predict_stride == 0) and (len(self.raw20_queue) == self.window_size)):
 
-        # ─────────────────────────────────────────────────────────────
-        # 3. 放大影格供顯示；所有待畫座標 × scale
-        # ─────────────────────────────────────────────────────────────
-        s = float(self.display_scale)          # e.g. 2.0
-        disp = (cv2.resize(frame, None, fx=s, fy=s,
-                        interpolation=cv2.INTER_LINEAR)
-                if s != 1.0 else frame.copy())
+            X20 = np.stack(self.raw20_queue, axis=0)[None, ...]  # (1,T,20)
 
-        # 放大後的 bbox 與線寬
-        x1, y1, x2, y2 = [int(v * s) for v in (x1o, y1o, x2o, y2o)]
-        # line_w = max(1, int(round(1 * s)))     # 線條寬度隨 scale 放大
-        cv2.rectangle(disp, (x1, y1), (x2, y2),
+            X_full, _, _, _ = build_features(
+                X         = X20,
+                y         = ["dummy"],
+                orig_size = (self.orig_w, self.orig_h),
+                vel_delta = self.vel_delta,
+                smooth_window_length = self.cfg["pose"]["smooth_window_length"],
+                polyorder = self.cfg["pose"]["polyorder"],
+                stats= self.stats 
+            )   # (1,T,F)
+                                                           
+            single_window = X_full[0]
+            final_lbl, top3 = self._predict_behavior(single_window)
+            if final_lbl:
+                self._last_behavior = final_lbl
+
+        # 4. 繪製結果
+        # 4.1 放大影格
+        s = float(self.display_scale)
+        # 先放大原框／骨架畫布
+        disp = cv2.resize(frame, None, fx=s, fy=s,
+                        interpolation=cv2.INTER_LINEAR) if s!=1.0 else frame.copy()
+
+        # 4.2 繪製 bbox
+        x1i, y1i, x2i, y2i = [int(v * s) for v in bbox]
+        cv2.rectangle(disp, (x1i, y1i), (x2i, y2i),
                     self.line_color, 1, cv2.LINE_AA)
 
-        # 放大後的 keypoint 座標
-        scaled_valid = {i: (int(pt[0] * s), int(pt[1] * s))
-                        for i, pt in valid.items()}
+        # 4.3 用 kps_conf 來決定哪個點可信（例如 > 0.3 就畫出來）
+        CONF_TH = self.yolo_conf
+        scaled_valid = {}
+        for idx, (kx, ky) in valid.items():
+            if kps_conf[idx] > CONF_TH:
+                scaled_valid[idx] = (int(kx*s), int(ky*s))
 
-        # 畫骨架
+        # 4.4 畫骨架連線
         for a, b in self.skeleton:
-            if a in scaled_valid and b in scaled_valid:
-                cv2.line(disp, scaled_valid[a], scaled_valid[b],
+            if a in scaled_valid   and b in scaled_valid  :
+                cv2.line(disp,
+                        scaled_valid[a], scaled_valid[b],
                         self.line_color, 1, cv2.LINE_AA)
-
-        # 畫 keypoints        
+        # 4.5 畫所有 keypoints
         for idx, pt in scaled_valid.items():
-            cv2.circle(disp, pt, 3, self.point_colors[idx], -1, cv2.LINE_AA)
+            cv2.circle(disp, pt, 3, self.point_colors[idx],
+                    -1, cv2.LINE_AA)
 
-        # 畫行為文字（若已預測出行為）
-        if behavior:
-            cv2.putText(disp, behavior,
-                        (x1, y1 - int(round(10 * s))),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5, (255, 255, 255),
-                        1, cv2.LINE_AA)
-
-        # 回傳「放大 + 已重新繪製」的影格，給 GUI 顯示
+        # 5. 在畫面標註最新行為
+        if hasattr(self, "_last_behavior"):
+            cv2.putText(
+                disp,
+                self._last_behavior,
+                (x1i, y1i - int(round(10 * s))),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA
+            )
         return disp
 
-    
-    def _get_valid_kps(self, bbox, kps_xy, curr_frame):
+    def _get_valid_kps(self, bbox, kps_xy):
         """
-        bbox: (x, y, w, h)
+        從yolo預測結果拿bbox, kpts位置
+        若缺失 => 用上一幀的補
+        仍缺失 => 用 box 中心
+
+        bbox: (x1, y1, x2, y2)
         kps_xy: np.ndarray (8,2) 
+
+        output: 補完之後的點 (因為behavior model不能吃 Nan)
         """
-        x, y, w, h = bbox
-        bbox_center = (x + w//2, y + h//2)
+        x1, y1, x2, y2 = bbox
+        cx, cy = (x1+x2)/2, (y1+y2)/2
         valid = {}
         for idx, (kx, ky) in enumerate(kps_xy):
             if kx > 0 and ky > 0:
@@ -359,203 +274,77 @@ class InferenceEngine:
                 avg = np.mean(self.kp_history[idx], axis=0)
                 valid[idx] = (int(avg[0]), int(avg[1]))
             else:
-                valid[idx] = bbox_center
+                valid[idx] = (cx, cy)
         return valid
 
-
-
-
-    def restore_and_normalize_keypoints(self, keypoints, input_size=640):
+    def make_raw20(self,
+                bbox: tuple[int,int,int,int],
+                valid: dict[int,tuple[int,int]]
+    ) -> np.ndarray:
         """
-        orig_size: 影片原始長寬
-        input_size: YOLO 輸入邊長
-        keypoints: List of (x_resized, y_resized)
-        orig_size: (w, h) of original frame
-        回傳 List of (x_orig, y_orig, x_norm, y_norm)
+        接收經過 _get_valid_kps 平滑後的 valid，
+        回傳原始size的 raw20 特徵：4 維 box + 16 維 keypoints
         """
-        orig_w, orig_h = self.frame_size
-        inp = input_size
-        scale = min(inp / orig_w, inp / orig_h)
-        pad_w = (inp - orig_w * scale) / 2
-        pad_h = (inp - orig_h * scale) / 2
+        x1, y1, x2, y2 = bbox
+        box_raw = [x1, y1, x2-x1, y2-y1]
 
-        restored = []
-        for x_res, y_res in keypoints:
-            x_orig = (x_res - pad_w) / scale
-            y_orig = (y_res - pad_h) / scale
-            x_norm = min(max(x_orig / orig_w, 0.0), 1.0)
-            y_norm = min(max(y_orig / orig_h, 0.0), 1.0)
-            restored.append((x_orig, y_orig, x_norm, y_norm))
-        return restored
+        pts_raw = []
+        for idx in range(8):
+            kx, ky = valid[idx]
+            pts_raw += [kx, ky]
 
-    # def calculate_velocity_acceleration(self, window):
-    #     """
-    #     window: deque of flat_kps_scaled vectors (每個 shape=(16,))
-    #     回傳 shape=(32,) 的速度+加速度特徵，或 None
-    #     """
-    #     if len(window) < 7:
-    #         return None
-    #     p_t   = window[-1]
-    #     p_t_1 = window[-self.vel_delta]
-    #     p_t_2 = window[-2*self.vel_delta]
-    #     v_t   = p_t   - p_t_1
-    #     v_t1  = p_t_1 - p_t_2
-    #     a_t   = v_t   - v_t1
-    #     return np.concatenate([v_t, a_t], axis=0)
-
-    # def compute_head_body_tail_cos(kpts):
-    #     """
-    #     kpts: Tensor of shape [seq_len, 8, 2]，第 8 個點順序為:
-    #     0:nose, 1:body, 2:tail_base, ... 其餘點可以忽略
-    #     回傳: Tensor of shape [seq_len, 1]，每個時間步的 cos(angle)
-    #     """
-        
-    #     nose, body, tail_base = kpts[0], kpts[1], kpts[2]
-    #     v1, v2 = (body - nose), (body - tail_base)
-    #     # 計算餘弦： (v1·v2) / (||v1|| * ||v2||)
-    #     dot = torch.sum(v1 * v2, dim=1, keepdim=True)  # [seq_len, 1]
-    #     norm = torch.norm(v1, dim=1, keepdim=True) * torch.norm(v2, dim=1, keepdim=True)  # [seq_len,1]
-    #     cos_angle = dot / (norm + 1e-6)  # 避免除以 0
-
-    #     return cos_angle  # [seq_len, 1]
-
-    def _build_feature_vector(self, frame, valid):
-        if len(valid) != 8:
-            return None
-
-        # 1) restore & normalize → flat_norm (16,)
-        pts = [valid[i] for i in range(8)]
-        restored = self.restore_and_normalize_keypoints(pts, input_size=self.yolo_input_size)
-        flat_rel   = np.array([coord for *_, x_n, y_n in restored 
-                                for coord in (x_n, y_n)], dtype=np.float32)  # (16,)
+        return np.array(box_raw + pts_raw, dtype=np.float32)
 
 
-        # 2) min-max normalize → flat_scaled (16,)
-        flat_kpt = np.array([coord for pt in pts for coord in pt], dtype=np.float32)
-        flat_minMax = (flat_kpt - self.X_min) / (self.X_max - self.X_min + 1e-6)
-        
-        self.pose_window_rel.append(flat_rel)
-        self.pose_window_minMax.append(flat_minMax)
- 
-        if len(self.pose_window_minMax) < 2*self.vel_delta+1:
-            return None
-        
-        # 調用utils function
-        # 3) velocity & acceleration (32,) 
-        X_minMax = np.stack(self.pose_window_minMax, axis=0)[None,...]  # (1, T, 16)
-        vel, acc = compute_velocity_acc(X_minMax, delta=self.vel_delta)
-        vel, acc = vel[0], acc[0]
-        velacc   = np.concatenate([vel[-1], acc[-1]], axis=0)     # (32,)
-
-        # 4) cos(angle) on relative coords
-        X_rel = np.stack(self.pose_window_rel, axis=0)               # (T,16)
-        kpt_seq = X_rel.reshape(-1, 8, 2)                            # (T,8,2)
-        cos_seq = compute_cos_np(kpt_seq)                         # (T,1)
-        cos_val = float(cos_seq[-1,0])                            # scalar
-
-        # 5) 空間距離 on relative coords
-        space_seq = compute_space_distances(X_rel[None,...])         # (1, T, 2)
-        space_val = space_seq[0,-1]                               # (2,)
-
-        # 6) 方向單位向量
-        dir_seq = compute_direction_unit(vel[None, ...])                        # → (1,T,2)
-        dir_val = dir_seq[0, -1]                                                # → (2,)
-
-        # ———— 7) 速度全局 std ————
-        std_seq = compute_speed_std(vel[None, ...])                             # → (1,T,1)
-        std_val = float(std_seq[0, -1, 0])                     
-
-        return np.concatenate([
-            flat_rel,           # 16
-            flat_minMax,         # 16
-            velacc,              # 32
-            [cos_val],           # 1
-            space_val,           # 2
-            dir_val,             # 2
-            [std_val],           # 1
-        ], axis=0)               # → 16+16+32+1+2+2+1 = 70
+    def _prepare_input(self, win_np: np.ndarray) -> np.ndarray: 
+        """
+        input: (T, feat_dim)
+        基於 SHAPE_SWITCH 的資訊 reshape input shape => fit model的輸入        
+        """
+        fn = SHAPE_SWITCH.get(self.bcfg["model"], SHAPE_SWITCH["default"])
+        tensor = torch.tensor(win_np, dtype=torch.float32).to(self.device)
+        out    = fn(tensor)
+        print(f"[DEBUG] model_in shape={out.shape}, dtype={out.dtype}, device={out.device}")
+        return out
     
-
-
-    def _predict_behavior(self):
+    def _predict_behavior(self, single_window: np.ndarray):
         """
-        當 model_input_window 滿後，送進 BiLSTM 預測，並做平滑
+        當 model_input_window 滿後，送進 行為模型 預測，並做平滑
         回傳 (final_label: str, top3: List[(label, prob)])
         """
-        if len(self.model_input_window) < self.window_size:
-            return "", []          # ← 還沒滿就什麼都不顯示
-        
-        # # shape → (channels=64, seq_len)
-        # window_np = np.array(self.model_input_window).T
-        # tensor = torch.tensor(window_np, dtype=torch.float32).unsqueeze(0).to(self.device)
-        # Transformer 需要 (batch, seq_len, feature_dim=65)
+        model_in = self._prepare_input(single_window)
 
-        window_np = np.stack(self.model_input_window, axis=0)      # (T, 70)
-        tensor = torch.tensor(window_np, dtype=torch.float32).unsqueeze(0)  # (1,T,70)
-        if isinstance(self.behavior_model, BehaviorBiLSTM_v3):
-            tensor = tensor.permute(0, 2, 1)                        # (1,70,T)
-        tensor = tensor.to(self.device)
-        
-        # ③ forward + softmax
+        # 1. forward + softmax
         with torch.no_grad():
-            probs  = torch.softmax(self.behavior_model(tensor), dim=1)[0].cpu().numpy()
-        self.behavior_probs_window.append(probs)
+            logits = ( self.behavior_model(*model_in)              # tuple 版本
+                    if isinstance(model_in, tuple)
+                    else self.behavior_model(model_in) )        # 單 tensor 版本
+            probs  = torch.softmax(logits, dim=1)[0].cpu().numpy()
 
+        # 2. 推到queue (用於平滑預測)
+        self.behavior_probs_window.append(probs)
         prob_seq  = np.array(self.behavior_probs_window)
         smoothed = self.smooth_predictions(prob_seq)
-        final = self.behavior_names[int(smoothed[-1])]
 
-        # top3
+        if len(smoothed) <= self.look_ahead:
+            return "", []
+        
+        mid_idx = -self.look_ahead-1
+        final_id = int(smoothed[mid_idx])
+        final    = self.behavior_names[final_id]
+
+        # 4. top3
         top3_idx = np.argsort(probs)[-3:][::-1]
         top3 = [(self.behavior_names[i], float(round(probs[i], 4))) for i in top3_idx]
 
+        # 5. for debug
+        print(
+            f"[DEBUG] logits[:5]={logits[0][:5].cpu().numpy()}, "
+            f"probs[:5]={probs[:5]}",
+            flush=True
+        )
+
         return final, top3
-
-    # def smooth_predictions(self, prob_window, rest_index: int):
-    #     """
-    #     prob_window: (T, C)
-    #     回傳長度 T 的 label array (np.ndarray)
-    #     """
-    #     T, C = prob_window.shape
-    #     raw = np.argmax(prob_window, axis=1)
-    #     out = raw.copy()
-    #     start = 0
-
-    #     while start < T:
-    #         lbl = raw[start]
-    #         end = start + 1
-    #         while end < T and raw[end] == lbl:
-    #             end += 1
-    #         length = end - start
-
-    #         # rest 特殊處理
-    #         if lbl == rest_index:
-    #             rest_probs = prob_window[start:end, rest_index]
-    #             low = rest_probs < self.rest_prob_margin
-    #             if np.any(low):
-    #                 top2 = np.argsort(prob_window[start:end], axis=1)[:, -2:]
-    #                 for i, (a, b) in enumerate(top2):
-    #                     if low[i]:
-    #                         out[start + i] = a if b == rest_index else b
-
-    #         # 其他的 duration 太短
-    #         elif length < self.min_any_duration:
-    #             prev_lbl = out[start-1] if start>0 else None
-    #             next_lbl = raw[end]    if end<T   else None
-    #             if prev_lbl is not None and prev_lbl == next_lbl:
-    #                 fill = prev_lbl
-    #             else:
-    #                 left  = np.sum(raw[max(0, start-50):start] == prev_lbl) if prev_lbl is not None else 0
-    #                 right = np.sum(raw[end:end+50] == next_lbl) if next_lbl is not None else 0
-    #                 fill = prev_lbl if left>= right else next_lbl
-    #             if fill is not None:
-    #                 out[start:end] = fill
-
-    #         start = end
-
-    #     return out
-
-    # inference.py ── 放在 InferenceEngine 類別內（取代舊 smooth_predictions）
 
     def smooth_predictions(self, prob_arr: np.ndarray) -> np.ndarray:
         """
@@ -574,7 +363,7 @@ class InferenceEngine:
             seg = slice(t, e)
             L   = e - t
 
-            # ── 1) rest 類別特殊門檻 ───────────────────────
+            # 1. 避免 短暫停留被判斷成rest => 用兩側行為補(相同)
             if lbl == REST_IDX:
                 low = prob_arr[seg, lbl] < self.rest_prob_margin
                 if low.any():
@@ -583,7 +372,7 @@ class InferenceEngine:
                         if low[i]:
                             out[t+i] = a if b == lbl else b
 
-            # ── 2) 片段太短 → 依兩側多數決補值 ─────────────
+            # 2. 兩側行為不同 => 依兩側多數決補值 
             elif L < self.min_any_duration:
                 pl = out[t-1]  if t > 0          else None   # previous label
                 nl = raw[e]    if e < len(raw)   else None   # next label

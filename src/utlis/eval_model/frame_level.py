@@ -7,32 +7,15 @@ import seaborn as sns
 import numpy as np
 
 
-# === 設定路徑 ===
-
-
-# === 讀取 ground truth 範圍 → 展開成每幀 ===
-def load_gt_frame_labels(txt_path):
-    gt_rows = []
-    with open(txt_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            m = re.match(r'frame:\s*(\d+)-(\d+)\s+(\w+)', line)
-            if m:
-                start, end, label = int(m.group(1)), int(m.group(2)), m.group(3)
-                for fid in range(start, end + 1):
-                    gt_rows.append((fid, label))
-    return pd.DataFrame(gt_rows, columns=["frame", "gt_behavior"])
 
 # === 主程式 ===
-def main():
+def main(start_video=1, end_video = 12):
     all_compare = []
-    start_video = 3
-    end_video = 3
     window = 96
     for i in range(start_video, end_video+1):
         video_id = i
         gt_csv = fr"data_prediction\dataset\gt_behaviors\gt_behavior_mice{i}.csv"
-        pred_csv = fr"data_prediction\prediction_results\2_behavios\pass2\behaviors_mice{i}.csv"    
+        pred_csv = fr"data_prediction\prediction_results\2_behavios\ST-TR\behaviors_mice{i}.csv"    
          
 
 
@@ -95,7 +78,5 @@ def main():
 
 
 
-
-
 if __name__ == "__main__":
-    main()
+    main(start_video=1, end_video=12)

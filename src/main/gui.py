@@ -14,35 +14,17 @@ from inference import InferenceEngine
 from collections import deque
 
 class MainWindow(QWidget):
-    def __init__(self, cfg: str):
+    def __init__(self, cfg: dict):
         super().__init__()
-        # self._load_config(cfg_path)
-        self.cfg = cfg    
-        self.display_scale = self.cfg.get("display_scale", 2.0)
+        self.cfg = cfg
+        self.display_scale = cfg.get("display_scale", 2.0)
+
         self._init_ui()
         self._init_video()
-        # 啟用拖放
         self.setAcceptDrops(True)
 
-        # 建立推論引擎
-        self.engine = InferenceEngine(
-            yolo_weights=self.cfg["yolo"]["weights"],
-            yolo_conf=self.cfg["yolo"]["conf"],
-            pose_input_size=self.cfg["yolo"]["input_size"],  
-            orig_size = self.cfg["yolo"]["orig_size"],
-
-            kp_history_len=self.cfg["pose"]["kp_history_len"],
-            vel_delta = self.cfg["pose"]["vel_delta"],
-            pose_class_path= self.cfg["pose"]["pose_class_path"],
-
-            behavior_model=self.cfg["behavior"]["model"], 
-            behavior_weights=self.cfg["behavior"]["weights"],
-            window_size=self.cfg["behavior"]["window_size"],
-
-            rest_prob_margin=self.cfg["behavior"]["rest_prob_margin"],
-            min_any_duration=self.cfg["behavior"]["min_any_duration"],
-            minmax_npz=self.cfg["paths"]["minmax_npz"],
-        )
+        # 只傳 cfg
+        self.engine = InferenceEngine(cfg)
         self.frame_buf = deque(maxlen=self.engine.window_size)
 
     def _init_ui(self):
@@ -121,7 +103,7 @@ class MainWindow(QWidget):
         if self.cap:
             self.cap.release()
             self.timer.stop()
-            self.engine.reset()
+            # self.engine.reset()
         self.cap = cv2.VideoCapture(path)
         if not self.cap.isOpened():
             print("影片開啟失敗")

@@ -2,38 +2,66 @@
 
 yolo:
   # YOLOv8-Pose 權重檔路徑
-  weights: "src/model/YOLO/YOLO_weights/mouse_pose_yolo11L_150/weights/best.pt"
-  # 信心門檻
+  weights: "src\\model\\YOLO\\YOLO_weights\\mouse_pose_yolo11L_150\\weights\\best.pt"
+  # weights: "src\\model\\YOLO\\YOLO_weights\\mouse_pose_yolo8l_v6\\weights\\best.pt"
+
   conf: 0.3
-  # 輸入尺寸 (正方形邊長)
   input_size: 640
-  # 原始影片長寬
   orig_size: [320, 240]
   #scale factor (將影像放大的倍數)
-  scale_fadisplay_scale: 2.0
+  scale_display_scale: 2.0
 
 
 pose:
   # keypoint 歷史長度 (滑動平均)
   kp_history_len: 1
-  vel_delta: 3
-  pose_class_path: "classes.npy"
+  vel_delta: 3  
+  smooth_window_length: 3
+  polyorder: 1
 
 behavior:
   # 行為模型權重檔
-  weights: "src\\model\\best_models\\best_epoch100_BehaviorBiLSTM_v3_3.pth"
+  # weights: "src\\model\\Behavior_models\\best_models\\BehaviorBiLSTM_v3_best_epoch112_test_F1_0.6786.pth"
+  # weights: "src\\model\\Behavior_models\\best_models\\BehaviorSTGCN_BiLSTM_ep05_loss0.7970.pth"
   # weights:  "src\\model\\best_models\\best_epoch100_BehaviorTransformer_7.pth"
   # window size (累積__幀數處理)
-  window_size: 96
-  # rest 類別低信心時的 margin
-  rest_prob_margin: 0.2
-  # 其他類別最短持續幀數
-  min_any_duration: 10
-  # 要用哪個行為模型類別
-  model: "BehaviorBiLSTM_v3"
-  # model: "BehaviorTransformer"
+  window_size: 32
+  predict_stride: 8
+  rest_prob_margin: 0
+  min_any_duration: 0
+  feature_dim: 54
+
+
+  # model: "BehaviorBiLSTM_v3"
+  # model: "BehaviorSTGCN_BiLSTM"
+  model: "SimpleSTTR_BiLSTM_v2"
+
+  model_params:
+  #   d_model:     64                 # Transformer 隱層維度
+  #   num_heads:   4                   # Multi-Head Attention 頭數
+  #   lstm_hidden: 64                  # Bi-LSTM hidden size
+  #   lstm_layers: 3                   # Bi-LSTM 疊層數
+  #   dropout_p:   0.2                 # Dropout(統一用)
+  #   num_classes: 7                   # 必填：行為類別數
+
+
+    d_model:     128                 # Transformer 隱層維度
+    sttr_dropout_p: 0.15
+    num_heads:   8                   # Multi-Head Attention 頭數
+    lstm_hidden: 64                  # Bi-LSTM hidden size
+    lstm_layers: 3                   # Bi-LSTM 疊層數
+    se_ratio:   16
+    lstm_dropout_p: 0.15                 # Dropout
+    num_classes: 7     
+    
+    # hidden_dim: 64             
+    # num_layers: 3
+    # dropout_p: 0.2
+    # se_ratio: 16
 
 paths:
-  # 存 keypoints min/max 參數的 npz 檔
-  minmax_npz: "minmax_values.npz"
+  experiment_root:  "C:\\Users\\micha\\Desktop\\behaviors_model_metrics\\SimpleSTTR_BiLSTM_v2_best_epoch26_test_F1_0.7437"
+  model_file:        best_model.pth
+  minmax_file:       minmax_stats.npz
+  labelenc_file:     label_encoder.pkl
   
