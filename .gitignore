@@ -41,3 +41,8 @@ src/model/YOLO_V6_pose/mouse_pose_yolo8l_v6/results.csv
 outputs/
 output/
 just_for_safe/
+eval_model/
+
+
+extract_heatmaps_sample.py
+kpts_to_heatmap.py
