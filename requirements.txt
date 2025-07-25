@@ -1,0 +1,13 @@
+numpy
+pandas
+scikit-learn
+scipy
+matplotlib
+torch
+PyQt5
+opencv-python
+pyyaml
+ultralytics
+deep_sort_realtime
+tqdm
+einops
