@@ -1,4 +1,4 @@
-numpy
+numpy<2.0
 pandas
 scikit-learn
 scipy
@@ -11,3 +11,5 @@ ultralytics
 deep_sort_realtime
 tqdm
 einops
+onnx==1.15.0
+onnxruntime==1.17.3     # 或 onnxruntime-gpu==1.17.3

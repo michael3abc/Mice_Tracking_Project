@@ -19,7 +19,7 @@ data_prediction/dataset/kpt_gt_behavior/kpt_gt_behavior.csv
 data_prediction/prediction_results/
 src/model/YOLO_V6_pose/mouse_pose_yolo8l_v6/results.csv
 *.cache
-
+.venv
 # 不追蹤模型和權重檔
 *.pt
 *.pth
@@ -42,6 +42,8 @@ outputs/
 output/
 just_for_safe/
 eval_model/
+YOLO_weights
+
 
 
 extract_heatmaps_sample.py

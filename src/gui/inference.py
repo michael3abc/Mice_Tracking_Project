@@ -2,11 +2,14 @@
 import cv2
 import numpy as np
 import sys, os
+import openvino as ov
 import torch, pickle
 from ultralytics import YOLO
+import openvino as ov 
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import numpy as np
 from collections import deque
+
 
 
 src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..')) #前兩層
@@ -23,7 +26,21 @@ from utils.model_factory import build_model, SHAPE_SWITCH
 class InferenceEngine:
     def __init__(self, cfg: dict, device: str | None = None):
         self.cfg    = cfg
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        # self.device = device or ("cuda" if torch.cuda.is_available() else "xpu")
+        auto_dev = None
+        if device:
+            auto_dev = device
+        else:
+            if torch.cuda.is_available():
+                auto_dev = "cuda"
+            elif torch.xpu.is_available():
+                auto_dev = "xpu"            
+            else:
+                auto_dev = "cpu"
+        self.device = auto_dev
+        print(f"[InferenceEngine] 使用裝置：{self.device}")
+
+
 
             # --- 把區塊存在屬性，供其他 init 用 ---
         self.ycfg, self.pcfg, self.bcfg, self.paths = (
@@ -69,8 +86,22 @@ class InferenceEngine:
         self.frame_size  = self.ycfg["orig_size"]
         self.orig_w, self.orig_h = self.frame_size
 
-        self.yolo = YOLO(self.ycfg["weights"])
-        self.yolo.fuse()
+        weight_path = str(self.ycfg["weights"])
+        
+        if weight_path.endswith(".pt"):
+            self.yolo = YOLO(weight_path)
+            self.yolo.fuse()
+            
+            print("[INFO] YOLO 以 PyTorch 後端啟動")
+
+        else:
+            # **直接交給 Ultralytics 處理 OpenVINO**：指定後端與裝置即可
+            print("[INFO] YOLO 以 OpenVINO 後端啟動，裝置：GPU")
+            self.yolo = YOLO(str(weight_path), 
+                             task="pose"
+                             )
+
+
 
         # 目前沒用到 DeepSort
         self.tracker = DeepSort(max_age=10, max_iou_distance=0.7)
@@ -107,6 +138,13 @@ class InferenceEngine:
 
         print("[INFO] 權重成功對齊 ✔")
         self.behavior_model.eval().to(self.device)
+        # if self.device == "xpu" and ipex is not None:
+        #     self.behavior_model = ipex.optimize(
+        #        self.behavior_model,
+        #        dtype=torch.float32,  # 可改用 torch.bfloat16
+        #        level="O2"            # 可選 O1/O2/O3
+        #    )
+        #     print("[InferenceEngine] 已對行為模型套用 IPEX 優化")
 
         # === 載入 Min‧Max & LabelEncoder ===
         npz = np.load(minmax_pz)
@@ -335,7 +373,7 @@ class InferenceEngine:
 
         # 4. top3
         top3_idx = np.argsort(probs)[-3:][::-1]
-        top3 = [(self.behavior_names[i], float(round(probs[i], 4))) for i in top3_idx]
+        top3 = [(self.behavior_names[i], round(float(probs[i]), 4)) for i in top3_idx]
 
         # # 5. for debug
         # print(
@@ -403,8 +441,15 @@ class InferenceEngine:
 
     def predict_behavior_batch(self, X: np.ndarray):
         model_in = self._prepare_input(X)
-        self.behavior_model.eval()
-        with torch.no_grad():
+        if self.device == "xpu":
+            # ctx = torch.xpu.amp.autocast(enabled=True, dtype=torch.bfloat16)
+            ctx = torch.no_grad()
+
+        else:
+            ctx = torch.no_grad()
+            
+
+        with ctx:
             # forward
             logits = ( self.behavior_model(*model_in)
                     if isinstance(model_in, tuple)
@@ -419,6 +464,9 @@ class InferenceEngine:
             results.append((top3[0][0], top3))  # top1 label 是 top3 的第一個
 
         return results
+
+
+
 
 
 # =============== for API ===============
