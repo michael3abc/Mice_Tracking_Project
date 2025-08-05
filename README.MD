@@ -65,16 +65,16 @@
    ```
 
 2. **建立虛擬環境並安裝依賴**
-   ```
+   ```bash
    python -m venv .venv
    source .venv/bin/activate  # 或 Windows: .venv\Scripts\activate
    pip install -r requirements.txt
    ```
 
 3. **下載模型權重**
-   **YOLO Pose:** [下載連結](https://drive.google.com/drive/folders/12jgkvQenM3ELlXaIJhsG4d3zrISqaoGt?usp=drive_link)
-   **Behavior models:** [下載連結](https://drive.google.com/drive/folders/196dMhi7VHGWXvNEQOBu1aVNC_n0ip9T5?usp=drive_link)
-   **data:** [下載連結](https://drive.google.com/drive/folders/1UnfhMxMBjFP7bpSWuiPisjmLjdhKdhey?usp=drive_link)
+   - YOLO Pose: [下載連結](https://drive.google.com/drive/folders/12jgkvQenM3ELlXaIJhsG4d3zrISqaoGt?usp=drive_link)**
+   - Behavior models: [下載連結](https://drive.google.com/drive/folders/196dMhi7VHGWXvNEQOBu1aVNC_n0ip9T5?usp=drive_link)
+   - data: [下載連結](https://drive.google.com/drive/folders/1UnfhMxMBjFP7bpSWuiPisjmLjdhKdhey?usp=drive_link)
 
 ## 前處理流程
 1. 影片 -> YOLOv11 預測關鍵點
