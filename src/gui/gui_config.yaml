@@ -29,8 +29,8 @@ behavior:
   # weights: "src\\model\\Behavior_models\\best_models\\BehaviorSTGCN_BiLSTM_ep05_loss0.7970.pth"
   # weights:  "src\\model\\best_models\\best_epoch100_BehaviorTransformer_7.pth"
   # window size (累積__幀數處理)
-  window_size: 32
-  predict_stride: 8
+  window_size: 60
+  predict_stride: 9
   rest_prob_margin: 0
   min_any_duration: 3
   feature_dim: 55
@@ -68,21 +68,20 @@ behavior:
     num_classes: 7
     stgcn_channels: [64, 64]
     sttr_dims: [64, 64]    
-    num_heads: 4
-    tcn_kernel: 9
-    dropout: 0.3
+    num_heads: 8
+    tcn_kernel: 3
+    dropout: 0.21687329685395496
     num_layers: 2
     # BiLSTM
     lstm_input: 55
-    lstm_hidden : 128
+    lstm_hidden : 256
     lstm_layers : 3
-    se_ratio : 16
-    dropout_p : 0.15
+    se_ratio : 32
+    dropout_p : 0.18609228515260207
 
 paths:
-  experiment_root:  "C:\\Users\\micha\\Desktop\\behaviors_model_metrics\\STTR_BiLSTM_best_epoch28_test_F1_0.7622"
-  # experiment_root:  "G:\\其他電腦\\我的電腦\\behaviors_model_metrics\\STTR_BiLSTM_best_epoch28_test_F1_0.7622"
+  experiment_root:  "C:\\Users\\micha\\Desktop\\behaviors_model_metrics\\STTR_BiLSTM_best_epoch25_test_F1_0.8040"
+  # experiment_root:  "G:\\其他電腦\\我的電腦\\behaviors_model_metrics\\STTR_BiLSTM_best_epoch25_test_F1_0.8040"
   model_file:        best_model.pth
-  minmax_file:       minmax_stats.npz
   labelenc_file:     label_encoder.pkl
   

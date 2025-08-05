@@ -63,7 +63,7 @@ class InferenceEngine:
 
 
         self.pose_window_rel      = deque(maxlen=self.window_size)
-        self.pose_window_minMax   = deque(maxlen=self.window_size)
+        # self.pose_window_minMax   = deque(maxlen=self.window_size)
         self.behavior_probs_window= deque(maxlen=self.window_size)
         self.model_input_window   = deque(maxlen=self.window_size) 
         self.kp_history = [deque(maxlen=self.pcfg["kp_history_len"]) for _ in range(8)]
@@ -107,7 +107,7 @@ class InferenceEngine:
     def _init_behavior_model(self):
         exp_dir = self.paths["experiment_root"]      # ← 一個資料夾
         model_pth = os.path.join(exp_dir, self.paths["model_file"])
-        minmax_pz = os.path.join(exp_dir, self.paths["minmax_file"])
+        # minmax_pz = os.path.join(exp_dir, self.paths["minmax_file"])
         le_pkl    = os.path.join(exp_dir, self.paths["labelenc_file"])
 
         # 1. 產生模型
@@ -145,10 +145,10 @@ class InferenceEngine:
         #     print("[InferenceEngine] 已對行為模型套用 IPEX 優化")
 
         # === 載入 Min‧Max & LabelEncoder ===
-        npz = np.load(minmax_pz)
-        self.X_min = np.asarray(npz["X_min"], dtype=np.float32)
-        self.X_max = np.asarray(npz["X_max"], dtype=np.float32)
-        self.stats = {"mins": self.X_min, "maxs": self.X_max}
+        # npz = np.load(minmax_pz)
+        # self.X_min = np.asarray(npz["X_min"], dtype=np.float32)
+        # self.X_max = np.asarray(npz["X_max"], dtype=np.float32)
+        # self.stats = {"mins": self.X_min, "maxs": self.X_max}
 
 
         with open(le_pkl, "rb") as f:
@@ -236,7 +236,7 @@ class InferenceEngine:
                 vel_delta = self.vel_delta,
                 smooth_window_length = self.cfg["pose"]["smooth_window_length"],
                 polyorder = self.cfg["pose"]["polyorder"],
-                stats= self.stats 
+                # stats= self.stats 
             )   # (1,T,F)
                                                            
             single_window = X_full[0]
@@ -430,8 +430,8 @@ class InferenceEngine:
         for dq in self.kp_history:
             dq.clear()
         # 如果你還有額外存 flat_scaled / flat_norm 的 deque
-        if hasattr(self, 'pose_window_minMax'):
-            self.pose_window_minMax.clear()
+        # if hasattr(self, 'pose_window_minMax'):
+        #     self.pose_window_minMax.clear()
         if hasattr(self, 'pose_window_rel'):
             self.pose_window_rel.clear()
         self.model_input_window.clear()

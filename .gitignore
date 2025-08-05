@@ -20,6 +20,7 @@ data_prediction/prediction_results/
 src/model/YOLO_V6_pose/mouse_pose_yolo8l_v6/results.csv
 *.cache
 .venv
+
 # 不追蹤模型和權重檔
 *.pt
 *.pth
@@ -36,6 +37,8 @@ src/model/YOLO_V6_pose/mouse_pose_yolo8l_v6/results.csv
 *.csv
 *.jpg
 *.txt
+
+!test_confusion_matrix.png
 
 # 不追蹤你的輸出目錄
 outputs/
