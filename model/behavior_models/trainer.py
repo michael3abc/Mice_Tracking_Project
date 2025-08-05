@@ -86,10 +86,12 @@ def train_and_save( model,
     tau_micro = cfg["class_improvement"]["micro_threshold"]         
     alpha_micro = cfg["class_improvement"]["micro_margin_weight"]
 
+    groom_idx = 1
+    tau_groom = cfg["class_improvement"]["groom_threshold"]
+    alpha_groom = cfg["class_improvement"]["groom_margin_weight"]
+
 
     for epoch in range(1, num_epochs+1):
-        if epoch <= cfg["train"]["warmup_epochs"]:
-            warmup_sched.step()
 
 # ================== train ==================
         model.train()
@@ -112,22 +114,29 @@ def train_and_save( model,
 
                 probs   = F.softmax(logits, dim=1)              # (B, C) → 轉成每個類別的機率分布
 
-                p_rest  = probs[:, rest_idx]                    # (B,) → 取出 rest_idx 這一維的機率值
-                non_rest_maxk = (y_batch != rest_idx).float()       # != rest 表示不是rest，val = 1
-                hinge_nonrest = F.relu(p_rest - tau_rest)* non_rest_maxk # 假設給非rest的信心過大 => (p_rest - tau) > 0 => relu 只留正的
-                rest_mask  = (y_batch == rest_idx).float()      # (B,)：真實標籤是 rest 的樣本標記為 1
-                hinge_rest = F.relu(tau_rest - p_rest) * rest_mask   # 同理rest信心過低也罰
-                margin_rest  = hinge_nonrest.mean() + hinge_rest.mean()               
+                p_rest          = probs[:, rest_idx]                    # (B,) → 取出 rest_idx 這一維的機率值
+                non_rest_maxk   = (y_batch != rest_idx).float()       # != rest 表示不是rest，val = 1
+                hinge_nonrest   = F.relu(p_rest - tau_rest)* non_rest_maxk # 假設給非rest的信心過大 => (p_rest - tau) > 0 => relu 只留正的
+                rest_mask       = (y_batch == rest_idx).float()      # (B,)：真實標籤是 rest 的樣本標記為 1
+                hinge_rest      = F.relu(tau_rest - p_rest) * rest_mask   # 同理rest信心過低也罰
+                margin_rest     = hinge_nonrest.mean() + hinge_rest.mean()               
 
 
-                p_micro          = probs[:, micro_idx]                    # (B,) → 取出 rest_idx 這一維的機率值
+                p_micro         = probs[:, micro_idx]                    # (B,) → 取出 rest_idx 這一維的機率值
                 non_micro_mask  = (y_batch != micro_idx).float()       # != rest 表示不是rest，val = 1
-                hinge_nonmicro = F.relu(p_micro - tau_micro) * non_micro_mask
-                micro_mask     = (y_batch == micro_idx).float()
-                hinge_micro    = F.relu(tau_micro - p_micro) * micro_mask
-                margin_micro   = hinge_nonmicro.mean() + hinge_micro.mean()
+                hinge_nonmicro  = F.relu(p_micro - tau_micro) * non_micro_mask
+                micro_mask      = (y_batch == micro_idx).float()
+                hinge_micro     = F.relu(tau_micro - p_micro) * micro_mask
+                margin_micro    = hinge_nonmicro.mean() + hinge_micro.mean()
 
-                loss = ce_loss + alpha_rest* margin_rest + alpha_micro* margin_micro
+                p_groom         = probs[:, groom_idx]
+                non_groom_mask  = (y_batch != groom_idx).float()
+                hinge_nongroom  = F.relu(p_groom - tau_groom)* non_groom_mask
+                groom_mask      = (y_batch == groom_idx).float()
+                hinge_groom     = F.relu(tau_groom - p_groom)* groom_mask
+                margin_groom    = hinge_nongroom.mean() + hinge_groom.mean()
+
+                loss = ce_loss + alpha_rest* margin_rest + alpha_micro* margin_micro + alpha_groom* margin_groom
   
 
 
@@ -140,6 +149,9 @@ def train_and_save( model,
             # scale step + update scaler
             scaler.step(optimizer)
             scaler.update()
+            
+            if epoch <= cfg["train"]["warmup_epochs"]:
+                warmup_sched.step()
 
 
             #4. 統計

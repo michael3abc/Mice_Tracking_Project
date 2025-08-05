@@ -6,7 +6,7 @@ data:
 
 sliding_window:
   window_size: 32  
-  stride:      8
+  stride:      8  
   min_pad_ratio: 0.6    # 如果切出的win不滿window_size，但>min_pad_ratio 
   pad_mode: "interp"    # =>  用該方式補值 ['interp', 'edge', 'zero']
 
@@ -14,7 +14,7 @@ sliding_window:
 sampling:
   test_videos:      [8, 9]
   n_per_behavior:   2000
-  max_win_per_behavior: {'rest':1000, 'default': 2000}
+  max_win_per_behavior: {'groom': 2000, 'micromovement':2000, 'rest':1000, 'walk': 2500, 'default': 2000}
 
 
 # 速度、加速度隔幾幀看
@@ -23,7 +23,7 @@ vel_delta: 3
 # savgol_filter
 smooth:
   window_length: 3
-  polyorder: 1
+  polyorder: 2
 
 split:
   val_size: 0.2
@@ -46,18 +46,19 @@ train:
   feature_dim: 55
 
 class_improvement:
-  rest_threshold: 0.8
+  rest_threshold: 0.7
   rest_margin_weight: 0.5
 
   micro_threshold:  0.7
   micro_margin_weight: 0.5
 
+  groom_threshold: 0.7
+  groom_margin_weight: 0.2
+
 
 early_stopping: 
-  patience:  20
+  patience:  15
   min_delta:   1e-5
-
-
 
 
 optimizer:
@@ -76,6 +77,22 @@ scheduler:
 
 
 #================== models ==================
+model:
+  name: "STTR_BiLSTM"
+  params:
+    num_classes: 7
+    stgcn_channels: [64, 64]
+    sttr_dims: [64, 64]    
+    num_heads: 4
+    tcn_kernel: 9
+    dropout: 0.3
+    num_layers: 2
+    # BiLSTM
+    lstm_input: 55
+    lstm_hidden : 128
+    lstm_layers : 3
+    se_ratio : 16
+    dropout_p : 0.15
 
 # model:
 #   name: "BehaviorBiLSTM_v3"
@@ -146,22 +163,7 @@ scheduler:
 #     # 6. 幾層 S-TR / T-TR
 #     num_layers: 2
 
-model:
-  name: "STTR_BiLSTM"
-  params:
-    num_classes: 7
-    stgcn_channels: [64, 64]
-    sttr_dims: [64, 64]    
-    num_heads: 4
-    tcn_kernel: 9
-    dropout: 0.3
-    num_layers: 2
-    # BiLSTM
-    lstm_input: 55
-    lstm_hidden : 128
-    lstm_layers : 3
-    se_ratio : 16
-    dropout_p : 0.15
+
 
 
 

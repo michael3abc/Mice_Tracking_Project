@@ -10,7 +10,7 @@ def main():
     with open(cfg_path, encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
 
-    size = 's'  # 選擇yolo模型尺寸    
+    size = 'n'  # 選擇yolo模型尺寸    
     model = YOLO(f"yolo11{size}-pose.pt")
 
     model.train(

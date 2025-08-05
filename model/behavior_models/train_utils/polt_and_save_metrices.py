@@ -209,5 +209,5 @@ def plot_cm(exp_folder, class_names, cm ):
     fig.tight_layout()
     fig.savefig(cm_path, dpi=150)
     print(f"✓ Test CM saved → {cm_path}")
-    plt.show()
+    # plt.show()
     plt.close(fig)     # 釋放記憶體

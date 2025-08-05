@@ -12,6 +12,7 @@ def sample_windows_by_bout(
         n_per_behavior: int          = 50,
         max_win_per_behavior: int | None = None,
         random_state: int            = 42,
+        return_indices: bool = False
 )-> Tuple[np.ndarray, np.ndarray, np.ndarray]:    
     """
     按行為(bout)重新抽測試資料：每種行為隨機抽 n_per_behavior 段 bout，
@@ -56,7 +57,14 @@ def sample_windows_by_bout(
         sel_idxs.extend(beh_idxs.tolist())
 
     sel_idxs = np.array(sel_idxs, dtype=int)
-    return X[sel_idxs], y[sel_idxs], bouts[sel_idxs]
+    X_sel     = X[sel_idxs]
+    y_sel     = y[sel_idxs]
+    bouts_sel = bouts[sel_idxs]
+
+    if return_indices:
+        return X_sel, y_sel, bouts_sel, sel_idxs
+    else:
+        return X_sel, y_sel, bouts_sel
 
 def assign_bout_ids(df):
     """

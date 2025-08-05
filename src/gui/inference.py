@@ -2,10 +2,9 @@
 import cv2
 import numpy as np
 import sys, os
-import openvino as ov
+# import openvino as ov
 import torch, pickle
 from ultralytics import YOLO
-import openvino as ov 
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import numpy as np
 from collections import deque
@@ -20,7 +19,6 @@ from utils.build_feature import build_features
 from utils.model_factory import build_model, SHAPE_SWITCH
 
 
-# os.chdir(r"C:\Users\micha\Desktop\Mice_tracking_project")
 
 
 class InferenceEngine:

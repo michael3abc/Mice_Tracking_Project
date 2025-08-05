@@ -157,19 +157,21 @@ def main(cfg):
     
     os.makedirs(exp_folder, exist_ok=True)
     # 1. save minmax資訊
-    minmax_pth = os.path.join(exp_folder,"minmax_stats.npz")    
-    np.savez(
-        minmax_pth,
-        X_min = stats["mins"],
-        X_max = stats["maxs"]
-    )
-    print(f"✔ 已寫入 {minmax_pth}")
+    # minmax_pth = os.path.join(exp_folder,"minmax_stats.npz")    
+    # np.savez(
+    #     minmax_pth,
+    #     X_min = stats["mins"],
+    #     X_max = stats["maxs"]
+    # )
+    # print(f"✔ 已寫入 {minmax_pth}")
 
     # 2. save class對應的idx
     le_path = os.path.join(exp_folder,"label_encoder.pkl")
     with open(le_path, "wb") as f:
         pickle.dump(le, f)
     print(f"✔ 已寫入 {le_path}")
+
+    return test_f1
 
 
 if __name__ == "__main__":

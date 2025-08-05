@@ -4,7 +4,7 @@ mode: train
 imgsz: 640
 batch: 16         # 依顯存
 
-epochs: 5
+epochs: 200
 close_mosaic: 10
 
 # ---- Loss Weights ----
