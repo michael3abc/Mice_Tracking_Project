@@ -30,7 +30,7 @@
 │       ├── models/                     # 不同行為模型的 class 定義
 │       ├── train.py                    # 行為模型訓練入口
 │       ├── trainer.py                  # 訓練流程 & checkpoint 儲存
-│       ├── dataset_loader.py           # Dataset 與 DataLoader 建立
+│       ├── datasets_loader.py          # Dataset 與 DataLoader 建立
 │       └── train_utils/                # 行為模型所需資料處理函式
 │
 ├── data
@@ -58,18 +58,21 @@
 ```
 
 ## 環境與安裝
-1. Clone 專案
+1. **Clone 專案**
    ```bash
-   git clone <repo_url> && cd <repo>
+    git clone https://github.com/michael3abc/Mice_Tracking_Project.git \
+    && cd Mice_Tracking_Project
+   ```
 
-2. 建立虛擬環境並安裝依賴
+2. **建立虛擬環境並安裝依賴**
    python -m venv .venv
    source .venv/bin/activate  # 或 Windows: .venv\Scripts\activate
    pip install -r requirements.txt
 
-3. 下載模型權重: 
-   YOLO Pose: [https://drive.google.com/drive/folders/12jgkvQenM3ELlXaIJhsG4d3zrISqaoGt?usp=sharing]
-   Behavior models: [https://drive.google.com/drive/folders/196dMhi7VHGWXvNEQOBu1aVNC_n0ip9T5?usp=sharing] 
+3. **下載模型權重**
+   YOLO Pose: [下載連結](https://drive.google.com/drive/folders/12jgkvQenM3ELlXaIJhsG4d3zrISqaoGt?usp=drive_link)
+   Behavior models: [下載連結](https://drive.google.com/drive/folders/196dMhi7VHGWXvNEQOBu1aVNC_n0ip9T5?usp=drive_link)
+   data: [下載連結](https://drive.google.com/drive/folders/1UnfhMxMBjFP7bpSWuiPisjmLjdhKdhey?usp=drive_link)
 
 ## 前處理流程
 1. 影片 -> YOLOv11 預測關鍵點
@@ -96,3 +99,6 @@
 - **Best Val F1**：0.874 @ epoch 25 
 - **Test F1**：0.804  
 - ![混淆矩陣](test_confusion_matrix.png)
+
+## 參考資料
+- 待補
