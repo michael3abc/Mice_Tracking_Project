@@ -6,8 +6,7 @@ import numpy as np
 from pathlib import Path
 from collections import deque
 from tqdm import tqdm
-from numpy.lib.stride_tricks import sliding_window_view
-
+from torch.cuda.amp import autocast
 
 
 
@@ -133,7 +132,8 @@ def predict_behavior_from_kpts(
     input_csv:     str,
     output_folder: str,
     out_name:      str = None,
-    out_put_csv:   bool=False
+    out_put_csv:   bool=False,
+    batch_size:    int = 512
 ):
     # ─────────────────── 1. 載入設定與模型結構 ───────────────────
     with open(cfg_path, "r", encoding="utf-8") as f:
@@ -146,15 +146,15 @@ def predict_behavior_from_kpts(
 
     model_path = os.path.join(exp_folder, "best_model.pth")
     encoder_path = os.path.join(exp_folder, "label_encoder.pkl")
-    minmax_path = os.path.join(exp_folder, "minmax_stats.npz")
+    # minmax_path = os.path.join(exp_folder, "minmax_stats.npz")
     feat_dim = cfg["train"]["feature_dim"]
 
     with open(encoder_path, "rb") as f:
         le = pickle.load(f)
     behavior_names = le.classes_.tolist()
 
-    stats = np.load(minmax_path)
-    minmax_stats = {"mins": stats["X_min"], "maxs": stats["X_max"]}
+    # stats = np.load(minmax_path)
+    # minmax_stats = {"mins": stats["X_min"], "maxs": stats["X_max"]}
 
     model = build_model(model_name, feat_dim, len(behavior_names), model_params)
     model.load_state_dict(torch.load(model_path, map_location=device))
@@ -183,14 +183,23 @@ def predict_behavior_from_kpts(
         smooth_window_length=cfg["smooth"]["window_length"],
         polyorder=cfg["smooth"]["polyorder"],
         le=le,
-        stats=minmax_stats
+        # stats=minmax_stats
     )
 
     # ─────────────────── 4. 模型推論 (不平滑) ───────────────────
+
+    all_probs = []
     with torch.no_grad():
-        X_tensor = torch.tensor(X_feat, dtype=torch.float32).to(device)
-        logits = model(X_tensor)
-        probs = torch.softmax(logits, dim=1).cpu().numpy()  # (M, C)
+        for start in range(0, X_feat.shape[0], batch_size):
+            end = start + batch_size
+            xb = X_feat[start:end]
+            xb_tensor = torch.tensor(xb, dtype=torch.float32).to(device)
+
+            with autocast():
+                logits = model(xb_tensor)
+            probs_batch  = torch.softmax(logits, dim=1).cpu().numpy()  # (M, C)
+            all_probs.append(probs_batch)
+    probs = np.concatenate(all_probs, axis = 0)
 
     # ─────────────────── 5. 解析 top1 + top3 ───────────────────
     N = len(df)
@@ -218,9 +227,11 @@ def predict_behavior_from_kpts(
         df[["behavior", "top1", "prob1", "top2", "prob2", "top3", "prob3"]].ffill()
     
     if out_put_csv:
-        Path(os.path.dirname(output_folder)).mkdir(parents=True, exist_ok=True)
-        output_csv = os.path.join(output_folder,out_name, ".csv")
-        df.to_csv(output_csv, index=False)
+        out_dir = Path(output_folder)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        output_csv =  out_dir / f"{out_name}.csv"
+        df.to_csv(output_csv, index=False, encoding="utf-8")
         print(f"✔ Done. Output saved to: {output_csv}")
     
     else:
@@ -228,13 +239,17 @@ def predict_behavior_from_kpts(
 
 
 if __name__ == "__main__":
+    yaml_path = r"src\gui\gui_config.yaml"
+    gui_cfg = yaml.safe_load(open(yaml_path, encoding="utf-8"))
+
     predict_behavior_from_kpts(
         cfg_path = r"model\behavior_models\train_config.yaml",
-        exp_folder=r"C:\Users\micha\Desktop\behaviors_model_metrics\STTR_BiLSTM_best_epoch28_test_F1_0.7622",
-        input_csv = r"data/prediction_results/1_keypoints/yolov11/keypoints_mice1.csv",
-        output_folder = r"data\prediction_results\2_behavios\STTR_BiLSTM",
-        out_name= "mice1",
-        out_put_csv = False
+        exp_folder=gui_cfg["paths"]["experiment_root"],
+        input_csv = r"data\prediction_results\3_combine\mice5_kpts.csv",
+        output_folder = r"data\prediction_results\3_combine",
+        out_name= "mice5_combimed",
+        out_put_csv = True,
+        batch_size=512
     )
 
 

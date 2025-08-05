@@ -14,9 +14,11 @@ def run_pipeline(
     yolo_weight     : str,
     yolo_conf       : float,
     kp_history_len  : int,
+    yolo_batch_size : int,
     # ------ kpts → behavior ------
     cfg_path        : str,
     exp_folder      : str,
+    beha_batch_size : int,
     # ------ I/O ------
     out_dir         : str,
     base_name       : str,        # 不帶 .csv 的檔名
@@ -38,7 +40,7 @@ def run_pipeline(
             out_csv     = str(kpt_csv),
             yolo_weight = yolo_weight,
             yolo_conf   = yolo_conf,
-            batch_size  = 32,
+            batch_size  = yolo_batch_size,
             kp_history_len = kp_history_len
             )
     
@@ -53,7 +55,8 @@ def run_pipeline(
         input_csv     = str(kpt_csv),
         output_folder = str(out_dir),
         out_name      = base_name,
-        out_put_csv   = False    
+        out_put_csv   = False,  
+        batch_size    = beha_batch_size  
     )
     
     # 根據 output_mode 決定輸出格式
@@ -79,21 +82,26 @@ def run_pipeline(
 
 if __name__ == "__main__":
     # === 讀 gui_config ===
-    yaml_path = r"src\gui\gui_config.yaml"
-    gui_cfg = yaml.safe_load(open(yaml_path, encoding="utf-8"))
+    gui_yaml_path = r"src\gui\gui_config.yaml"
+    gui_cfg = yaml.safe_load(open(gui_yaml_path, encoding="utf-8"))
 
+    pipeline_yaml_path = r"tools\prediction_tools\pipeline_cfg.yaml"
+    pip_cfg = yaml.safe_load(open(pipeline_yaml_path, encoding="utf-8")) 
+    
     run_pipeline(
         # video
-        video_path     = r"C:\Users\micha\Desktop\dataset_video\mice5.mpg",
+        video_path     = pip_cfg["video_path"],
         # YOLO
-        yolo_weight    = gui_cfg["yolo"]["weights"],
+        yolo_weight    = pip_cfg.get("yolo_weight") or gui_cfg["yolo"]["weights"],
         yolo_conf      = gui_cfg["yolo"]["conf"],
         kp_history_len = gui_cfg["pose"]["kp_history_len"],
+        yolo_batch_size= pip_cfg["yolo_batch_size"],
         # 行為模型
         cfg_path       = r"model\behavior_models\train_config.yaml",
-        exp_folder     = r"C:\Users\micha\Desktop\behaviors_model_metrics\STTR_BiLSTM_best_epoch28_test_F1_0.7622",
+        exp_folder     = gui_cfg["paths"]["experiment_root"],
+        beha_batch_size= pip_cfg["beha_batch_size"],
         # output
-        out_dir        = r"data\prediction_results\3_combine",
-        base_name      = "mice5",
-        output_mode    = "single"
+        out_dir        = pip_cfg["out_dir"],
+        base_name      = pip_cfg["base_name"],
+        output_mode    = pip_cfg["output_mode"]
     )

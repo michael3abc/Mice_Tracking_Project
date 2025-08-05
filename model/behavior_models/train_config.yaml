@@ -5,8 +5,8 @@ data:
   orig_size: [320, 240]
 
 sliding_window:
-  window_size: 32  
-  stride:      8  
+  window_size: 60  
+  stride:      9  
   min_pad_ratio: 0.6    # 如果切出的win不滿window_size，但>min_pad_ratio 
   pad_mode: "interp"    # =>  用該方式補值 ['interp', 'edge', 'zero']
 
@@ -14,11 +14,11 @@ sliding_window:
 sampling:
   test_videos:      [8, 9]
   n_per_behavior:   2000
-  max_win_per_behavior: {'groom': 2000, 'micromovement':2000, 'rest':1000, 'walk': 2500, 'default': 2000}
+  max_win_per_behavior: {'groom': 3400, 'micromovement':3600, 'rest':3800, 'walk': 4000, 'default': 4000}
 
 
 # 速度、加速度隔幾幀看
-vel_delta: 3
+vel_delta: 5
 
 # savgol_filter
 smooth:
@@ -37,24 +37,31 @@ dataloader:
 
 train:
   epochs:       100
-  lr:           1e-3         # base_lr
+  lr:           3.215542013678128e-05         # base_lr
   warmup_epochs: 0           # 前 5 個 epoch 做 warm‐up
   device:       "cuda"
   seed:         42
   label_smoothing: 0
-  weight: [1.0, 1.0, 0.9, 1.2, 1.0, 0.8, 1.1]
+  # weight: [1.0, 1.0, 0.9, 1.2, 1.0, 0.8, 1.1]
+  weights: [0.8243709895391481,
+            1.220318174028121,
+            0.8211152164054287,
+            0.9262551319423596,
+            0.9428775790337498,
+            0.7679133810156987,
+            0.9716796242990394]
+
   feature_dim: 55
 
 class_improvement:
-  rest_threshold: 0.7
-  rest_margin_weight: 0.5
+  rest_threshold: 0.7183927309063202
+  rest_margin_weight: 0.07565920321956998
 
-  micro_threshold:  0.7
-  micro_margin_weight: 0.5
+  micro_threshold:  0.7282398826012018
+  micro_margin_weight: 0.22690259176235494
 
-  groom_threshold: 0.7
-  groom_margin_weight: 0.2
-
+  groom_threshold: 0.5625520576393022
+  groom_margin_weight: 0.003304609115505043
 
 early_stopping: 
   patience:  15
@@ -83,16 +90,16 @@ model:
     num_classes: 7
     stgcn_channels: [64, 64]
     sttr_dims: [64, 64]    
-    num_heads: 4
-    tcn_kernel: 9
-    dropout: 0.3
+    num_heads: 8
+    tcn_kernel: 3
+    dropout: 0.21687329685395496
     num_layers: 2
     # BiLSTM
     lstm_input: 55
-    lstm_hidden : 128
+    lstm_hidden : 256
     lstm_layers : 3
-    se_ratio : 16
-    dropout_p : 0.15
+    se_ratio : 32
+    dropout_p : 0.18609228515260207
 
 # model:
 #   name: "BehaviorBiLSTM_v3"

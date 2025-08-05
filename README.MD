@@ -102,5 +102,10 @@
 - **Test F1**：0.804  
 - ![混淆矩陣](test_confusion_matrix.png)
 
+## 使用方式
+1. **使用影片預測行為** 開啟 ```tools\prediction_tools\video_pred_pipeline.py```，並於```tools\prediction_tools\pipeline_cfg.yaml```中設置影片位置、YOLO模型權重、batch_size以及輸出名稱。
+2. **實時預覽預測結果** 開啟```src\gui\main.py```，點擊open_video開啟影片，或是將影片拖曳至視窗，按play。
+- 已使用最佳權重，如欲更換請於```src\gui\gui_config.yaml```中設置```gui_cfg["paths"]["experiment_root"]```
+
 ## 參考資料
 - 待補
