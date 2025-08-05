@@ -72,7 +72,7 @@
    ```
 
 3. **下載模型權重**
-   - YOLO Pose: [下載連結](https://drive.google.com/drive/folders/12jgkvQenM3ELlXaIJhsG4d3zrISqaoGt?usp=drive_link)**
+   - YOLO Pose: [下載連結](https://drive.google.com/drive/folders/12jgkvQenM3ELlXaIJhsG4d3zrISqaoGt?usp=drive_link)
    - Behavior models: [下載連結](https://drive.google.com/drive/folders/196dMhi7VHGWXvNEQOBu1aVNC_n0ip9T5?usp=drive_link)
    - data: [下載連結](https://drive.google.com/drive/folders/1UnfhMxMBjFP7bpSWuiPisjmLjdhKdhey?usp=drive_link)
 
@@ -93,9 +93,9 @@
 ## 模型架構
 - **YOLO Pose**（Ultralytics YOLOv11）：輸出 8 點 keypoints  
 - **STTR_BiLSTM**：  
-  1. ST-GCN 抽取時空圖特徵  
-  2. Transformer 時間/空間注意力  
-  3. BiLSTM 分類  
+  ST-GCN 抽取時空圖特徵 -> ST-TR (空間/時間注意力 )
+  BiLSTM  
+  ![圖示](model_structure.jpg) 
   
 ## 實驗結果
 - **Best Val F1**：0.874 @ epoch 25 

@@ -39,6 +39,7 @@ src/model/YOLO_V6_pose/mouse_pose_yolo8l_v6/results.csv
 *.txt
 
 !test_confusion_matrix.png
+!model_structure.jpg
 
 # 不追蹤你的輸出目錄
 outputs/
