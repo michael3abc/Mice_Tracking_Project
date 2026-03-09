@@ -4,7 +4,6 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 from model.behavior_models.models.BiLSTM import BehaviorBiLSTM_v3
-from model.behavior_models.models.BiLSTM import BehaviorBiLSTM_v3
 from model.behavior_models.models.ST_TR import SimpleSTTR, STTRNet
 from model.behavior_models.models.Hybird import SimpleSTTR_BiLSTM, STTR_BiLSTM , SimpleSTTR_BiLSTM_v2, LSTM_Transformer
 from model.behavior_models.models.ST_GCN import BehaviorSTGCN_BiLSTM, A_norm
@@ -86,4 +85,3 @@ SHAPE_SWITCH = {
     # ───── 其餘未知模型 ─────
     "default":                lambda x: x.unsqueeze(0),    # (T,70)→(1,T,70)
 }
-

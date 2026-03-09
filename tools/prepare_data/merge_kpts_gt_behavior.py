@@ -14,8 +14,8 @@ if __name__ == '__main__':
 
     df_kpt_with_labeled = []
     for i in range(start, end+1):
-        df_gt_behavior = pd.read_csv(os.path.join(gt_csv_folder, f"gt_behavior_mice{start}.csv"))
-        df_kpt_pred = pd.read_csv(os.path.join(kpt_folder, f"keypoints_mice{end}.csv"))
+        df_gt_behavior = pd.read_csv(os.path.join(gt_csv_folder, f"gt_behavior_mice{i}.csv"))
+        df_kpt_pred = pd.read_csv(os.path.join(kpt_folder, f"keypoints_mice{i}.csv"))
        
         if "video" not in df_kpt_pred.columns:
             df_kpt_pred["video"] = i
@@ -23,7 +23,7 @@ if __name__ == '__main__':
         df_labeled = pd.merge(df_kpt_pred,df_gt_behavior, on=["video", "frame"], how='inner')
         # 儲存到 list
         df_kpt_with_labeled.append(df_labeled)
-        print(f"✅ 合併完成：mice{start}~{end}.csv，樣本數 = {len(df_labeled)}")
+        print(f"✅ 合併完成：mice{i}.csv，樣本數 = {len(df_labeled)}")
 
     # 3. 合併所有影片成一份總表
     df_all = pd.concat(df_kpt_with_labeled, ignore_index=True)
@@ -34,4 +34,3 @@ if __name__ == '__main__':
     out_csv = os.path.join(out_folder, 'kpts_with_gt_behavior_yolov11.csv') # your file name
     df_all.to_csv(out_csv, index=False)
     print(f"\n 已完成：已輸出 {out_csv}，總樣本數 = {len(df_all)}")
-

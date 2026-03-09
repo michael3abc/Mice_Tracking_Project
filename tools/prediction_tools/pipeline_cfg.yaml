@@ -1,4 +1,4 @@
-video_path: "C:\\Users\\micha\\Desktop\\dataset_video\\mice5.mpg"
+video_path: "data\\videos\\mice5.mpg"
 yolo_weight: "model\\YOLO\\YOLO_weights\\mouse_pose_yolo11s_80\\weights\\best.pt"
 yolo_batch_size: 32
 beha_batch_size: 512

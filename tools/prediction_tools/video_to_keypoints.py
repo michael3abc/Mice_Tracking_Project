@@ -60,9 +60,18 @@ def video_to_keypoints_batch(
     frame_id = 0
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    pbar = tqdm(total=total_frames, desc="YOLO Keypoints", unit="frame")
+    if max_frames is not None and max_frames < 0:
+        cap.release()
+        raise ValueError("max_frames must be >= 0 or None")
+    if max_frames is None:
+        pbar_total = total_frames if total_frames > 0 else None
+    else:
+        pbar_total = min(total_frames, max_frames) if total_frames > 0 else max_frames
+    pbar = tqdm(total=pbar_total, desc="YOLO Keypoints", unit="frame")
     
     while True:
+        if max_frames is not None and frame_id >= max_frames:
+            break
         ret, frame = cap.read()
         if not ret:
             break

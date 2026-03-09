@@ -80,7 +80,7 @@ behavior:
     dropout_p : 0.18609228515260207
 
 paths:
-  experiment_root:  "C:\\Users\\micha\\Desktop\\behaviors_model_metrics\\STTR_BiLSTM_best_epoch25_test_F1_0.8040"
+  experiment_root:  "outputs\\behaviors_model_metrics\\STTR_BiLSTM_best_epoch25_test_F1_0.8040"
   # experiment_root:  "G:\\其他電腦\\我的電腦\\behaviors_model_metrics\\STTR_BiLSTM_best_epoch25_test_F1_0.8040"
   model_file:        best_model.pth
   labelenc_file:     label_encoder.pkl

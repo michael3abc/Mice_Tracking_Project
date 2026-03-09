@@ -237,7 +237,7 @@ def det_rest(vel: np.array, speed_th = 0.05):
 
 def compute_box_features(box_arr: np.ndarray, orig_size: tuple[int,int]):
     """
-    將box資訊轉成 center_x, center_y, area, 位移量平方, 面積變化量。
+    從 box 資訊計算中心位移平方特徵 (disp2)。
 
     參數
     -------
@@ -246,8 +246,8 @@ def compute_box_features(box_arr: np.ndarray, orig_size: tuple[int,int]):
 
     回傳
     -------
-    np.ndarray, shape = (N, T, 5)
-        [wh_ratio, disp2, dc] #
+    np.ndarray, shape = (N, T, 1)
+        [disp2]  # 目前僅保留中心位移平方特徵
     """
     
     N, T, F = box_arr.shape
@@ -277,12 +277,12 @@ def compute_box_features(box_arr: np.ndarray, orig_size: tuple[int,int]):
     # dc    = dc[:,:,None]
 
     # da    = np.diff(area,  axis=1, prepend=area[:,:1])
-    return np.concatenate([ 
+    return np.concatenate([
                             # area,
                             # wh_ratio,
                             disp2,
                             # dc               
-                           ], axis=-1)  # (N, T, 3)
+                           ], axis=-1)  # (N, T, 1)
 
 
 # for train / inference
@@ -365,7 +365,7 @@ def build_features(X, y=None, orig_size=None, vel_delta=3, smooth_window_length=
             dir_feats,    # 2
             speed_std,    # 1
             # rest_micro,   # 1
-            box_feats,    # 3
+            box_feats,    # 1
             # convex_area,   # 1 
             # delta_convex
         ],
