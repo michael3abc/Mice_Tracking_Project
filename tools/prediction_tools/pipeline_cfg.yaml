@@ -1,0 +1,8 @@
+video_path: "C:\\Users\\micha\\Desktop\\dataset_video\\mice5.mpg"
+yolo_weight: "model\\YOLO\\YOLO_weights\\mouse_pose_yolo11s_80\\weights\\best.pt"
+yolo_batch_size: 32
+beha_batch_size: 512
+
+out_dir: "data\\prediction_results\\3_combine"
+base_name: "mice5"
+output_mode: "single"
