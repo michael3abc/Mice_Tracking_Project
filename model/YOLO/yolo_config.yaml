@@ -1,0 +1,39 @@
+# ---- Core ----
+task: pose
+mode: train
+imgsz: 640
+batch: 16         # 依顯存
+
+epochs: 200
+close_mosaic: 10
+
+# ---- Loss Weights ----
+box: 7.5
+cls: 0.2
+pose: 12.0
+kobj: 1.0
+
+# ---- LR Schedule ----
+lr0: 0.005
+lrf: 0.01
+momentum: 0.937
+weight_decay: 0.0005
+warmup_epochs: 3.0
+
+# ---- Augmentations ----
+fliplr: 0.5
+flipud: 0.05
+degrees: 15.0
+shear: 2.0
+translate: 0.1
+scale: 0.5
+mosaic: 1.0
+mixup: 0.25
+copy_paste: 0.15
+auto_augment: null
+erasing: 0.0
+
+# ---- Misc ----
+amp: true
+device: 0
+workers: 8

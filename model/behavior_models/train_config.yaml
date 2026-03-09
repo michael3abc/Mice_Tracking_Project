@@ -1,0 +1,181 @@
+data:
+  path: "data\\gt_dataset\\3_pred_kpt_gt_behavior\\kpts_with_gt_behavior_yolov11.csv"
+  # path: "data_prediction\\dataset\\kpt_gt_behavior\\kpts_with_gt_behavior_yolov8.csv"
+
+  orig_size: [320, 240]
+
+sliding_window:
+  window_size: 60  
+  stride:      9  
+  min_pad_ratio: 0.6    # 如果切出的win不滿window_size，但>min_pad_ratio 
+  pad_mode: "interp"    # =>  用該方式補值 ['interp', 'edge', 'zero']
+
+
+sampling:
+  test_videos:      [8, 9]
+  n_per_behavior:   2000
+  max_win_per_behavior: {'groom': 3400, 'micromovement':3600, 'rest':3800, 'walk': 4000, 'default': 4000}
+
+
+# 速度、加速度隔幾幀看
+vel_delta: 5
+
+# savgol_filter
+smooth:
+  window_length: 3
+  polyorder: 2
+
+split:
+  val_size: 0.2
+
+
+dataloader:
+  batch_size: 512
+  for_lstm: true
+  num_workers: 8 # 平行讀取 的子程序數量
+  pin_memory: true # 優化 CPU→GPU 的記憶體copy
+
+train:
+  epochs:       100
+  lr:           3.215542013678128e-05         # base_lr
+  warmup_epochs: 0           # 前 5 個 epoch 做 warm‐up
+  device:       "cuda"
+  seed:         42
+  label_smoothing: 0
+  # weight: [1.0, 1.0, 0.9, 1.2, 1.0, 0.8, 1.1]
+  weights: [0.8243709895391481,
+            1.220318174028121,
+            0.8211152164054287,
+            0.9262551319423596,
+            0.9428775790337498,
+            0.7679133810156987,
+            0.9716796242990394]
+
+  feature_dim: 55
+
+class_improvement:
+  rest_threshold: 0.7183927309063202
+  rest_margin_weight: 0.07565920321956998
+
+  micro_threshold:  0.7282398826012018
+  micro_margin_weight: 0.22690259176235494
+
+  groom_threshold: 0.5625520576393022
+  groom_margin_weight: 0.003304609115505043
+
+early_stopping: 
+  patience:  15
+  min_delta:   1e-5
+
+
+optimizer:
+  type:          "AdamW"
+  betas:         [0.9, 0.999]
+  eps:           1e-8
+  weight_decay:  1e-3
+
+scheduler:
+  plateau:
+    mode:       min
+    factor:     0.5
+    patience:   2
+    threshold:  0.0001
+    min_lr:     1e-6
+
+
+#================== models ==================
+model:
+  name: "STTR_BiLSTM"
+  params:
+    num_classes: 7
+    stgcn_channels: [64, 64]
+    sttr_dims: [64, 64]    
+    num_heads: 8
+    tcn_kernel: 3
+    dropout: 0.21687329685395496
+    num_layers: 2
+    # BiLSTM
+    lstm_input: 55
+    lstm_hidden : 256
+    lstm_layers : 3
+    se_ratio : 32
+    dropout_p : 0.18609228515260207
+
+# model:
+#   name: "BehaviorBiLSTM_v3"
+#   params:
+#     hidden_dim: 64                # 可自行調大（128/256）
+#     num_layers: 3
+#     dropout_p: 0.2
+#     se_ratio: 16
+  
+
+# model:
+#   name: "SimpleSTTR_BiLSTM"         
+#   params:
+#     d_model:     64                 # Transformer 隱層維度
+#     num_heads:   4                   # Multi-Head Attention 頭數
+#     lstm_hidden: 64                  # Bi-LSTM hidden size
+#     lstm_layers: 3                   # Bi-LSTM 疊層數
+#     dropout_p:   0.15                 # Dropout(統一用)
+#     num_classes: 7                   # 必填：行為類別數
+
+
+# model:
+#   name: "SimpleSTTR_BiLSTM_v2"         
+#   params:
+#     d_model:     128                 # Transformer 隱層維度
+#     sttr_dropout_p: 0.15
+#     num_heads:   8                   # Multi-Head Attention 頭數
+#     lstm_hidden: 64                  # Bi-LSTM hidden size
+#     lstm_layers: 3                   # Bi-LSTM 疊層數
+#     se_ratio:   16
+#     lstm_dropout_p: 0.15                 # Dropout
+#     num_classes: 7                  
+
+# model:
+#   name: "LSTM_Transformer"         
+#   params:
+#     d_model:     64                 # Transformer 隱層維度
+#     num_heads:   4                   # Multi-Head Attention 頭數
+#     lstm_hidden: 64                  # Bi-LSTM hidden size
+#     lstm_layers: 3                   # Bi-LSTM 疊層數
+#     dropout_p:   0.15                 # Dropout(統一用)
+#     num_classes: 7                   # 必填：行為類別數
+
+# model:
+#   name: "SimpleSTTR"          
+#   params:
+#     d_model:     128                 # Transformer 隱層維度
+#     num_heads:   4                   # Multi-Head Attention 頭數
+#     num_classes: 7                   # 必填：行為類別數
+
+# model:
+#   name: "STTRNet"
+#   params:
+#     num_classes: 7
+#     # 前段 ST‐GCN Block 
+#     stgcn_channels: [32, 64]
+
+#     # 2) S-TR / T-TR 每一層的 d_model 
+#     sttr_dims: [64, 64]    
+#     num_heads : 4
+
+#     # 4) STGCNBlock 內的時域卷積 kernel size
+#     t_kernel  : 3
+
+#     # 5. Dropout 比例 (同時傳給 STRBlock/TTRBlock)
+#     dropout   : 0.15
+
+#     # 6. 幾層 S-TR / T-TR
+#     num_layers: 2
+
+
+
+
+
+
+
+save:
+  model_folder: "src\\model\\Behavior_models\\best_models"
+  metrics_folder: "C:\\Users\\micha\\Desktop\\behaviors_model_metrics"
